@@ -10,7 +10,7 @@
   <style>
     :root {
       --bg-primary: #07090e;
-      --bg-card: rgba(16, 22, 34, 0.85);
+      --bg-card: rgba(16, 22, 34, 0.88);
       --accent-emerald: #10b981;
       --accent-cyan: #06b6d4;
       --accent-crimson: #ef4444;
@@ -135,7 +135,7 @@
     .peers-backdrop {
       position: absolute;
       inset: 0;
-      background: rgba(3, 7, 18, 0.8);
+      background: rgba(3, 7, 18, 0.82);
       backdrop-filter: blur(8px);
     }
 
@@ -287,7 +287,7 @@
       border-radius: 10px;
       padding: 12px 14px;
       color: #fff;
-      font-size: 16px !important; /* Prevents iOS auto-zoom */
+      font-size: 16px !important;
       font-family: var(--font-mono);
       outline: none;
       transition: all 0.2s ease;
@@ -325,7 +325,7 @@
     .call-stage {
       flex: 1;
       position: relative;
-      background: #000;
+      background: radial-gradient(circle at center, #0b1120 0%, #020617 100%);
       display: none;
       align-items: center;
       justify-content: center;
@@ -333,7 +333,7 @@
       cursor: pointer;
     }
 
-    /* Remote Video Viewport */
+    /* Remote Video Viewport with Ambient Lighting */
     .remote-video-wrap {
       width: 100%;
       height: 100%;
@@ -341,14 +341,23 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: #04060a;
+      background: #020617;
+      overflow: hidden;
     }
 
+    /* Optimized Aspect Ratio: Default contain prevents head / side cropping */
     .remote-video {
       width: 100%;
       height: 100%;
-      object-fit: cover;
+      object-fit: contain;
       display: block;
+      transition: object-fit 0.25s ease, opacity 0.2s ease;
+      background: #000;
+    }
+
+    /* Fill Screen Mode (User Toggled) */
+    .remote-video.fill-screen {
+      object-fit: cover;
     }
 
     .waiting-placeholder {
@@ -356,30 +365,37 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 12px;
-      color: #64748b;
-      font-size: 0.9rem;
+      gap: 14px;
+      color: #94a3b8;
+      font-size: 0.92rem;
       text-align: center;
-      padding: 20px;
+      padding: 24px;
       pointer-events: none;
+      z-index: 20;
+      background: rgba(2, 6, 23, 0.85);
+      border-radius: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);
+      max-width: 90vw;
     }
 
     .waiting-pulse {
-      width: 60px;
-      height: 60px;
+      width: 64px;
+      height: 64px;
       border-radius: 50%;
-      background: rgba(6, 182, 212, 0.1);
-      border: 1px solid rgba(6, 182, 212, 0.3);
+      background: rgba(6, 182, 212, 0.12);
+      border: 1px solid rgba(6, 182, 212, 0.4);
       display: flex;
       align-items: center;
       justify-content: center;
-      animation: pulse-ring 2s infinite;
+      animation: pulse-ring 2.2s infinite ease-in-out;
       color: var(--accent-cyan);
     }
 
     @keyframes pulse-ring {
-      0%, 100% { transform: scale(1); opacity: 1; }
-      50% { transform: scale(1.1); opacity: 0.5; }
+      0%, 100% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(6, 182, 212, 0.4); }
+      50% { transform: scale(1.08); opacity: 0.7; box-shadow: 0 0 20px 6px rgba(6, 182, 212, 0.2); }
     }
 
     /* Local Picture-in-Picture Video */
@@ -389,24 +405,31 @@
       right: 16px;
       width: 110px;
       height: 155px;
-      border-radius: 12px;
+      border-radius: 14px;
       overflow: hidden;
-      border: 2px solid rgba(255, 255, 255, 0.2);
-      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.6);
+      border: 2px solid rgba(6, 182, 212, 0.4);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.75);
       background: #07090e;
       z-index: 40;
-      transition: border-color 0.2s ease;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      cursor: pointer;
     }
 
     .local-pip-wrap:hover {
       border-color: var(--accent-cyan);
+      box-shadow: 0 8px 30px rgba(6, 182, 212, 0.3);
+    }
+
+    .local-pip-wrap.pip-expanded {
+      width: 160px;
+      height: 220px;
     }
 
     .local-video {
       width: 100%;
       height: 100%;
       object-fit: cover;
-      transform: scaleX(-1); /* Mirror local self-view */
+      transform: scaleX(-1);
     }
 
     /* Call Controls Floating Dock */
@@ -417,19 +440,19 @@
       transform: translateX(-50%);
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
       padding: 10px 16px;
-      background: rgba(13, 17, 26, 0.88);
-      backdrop-filter: blur(20px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(13, 17, 26, 0.92);
+      backdrop-filter: blur(24px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
       border-radius: 999px;
       z-index: 50;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+      box-shadow: 0 12px 35px rgba(0, 0, 0, 0.8);
     }
 
     .ctrl-btn {
-      width: 48px;
-      height: 48px;
+      width: 46px;
+      height: 46px;
       border-radius: 50%;
       border: 1px solid rgba(255, 255, 255, 0.15);
       background: rgba(255, 255, 255, 0.08);
@@ -443,7 +466,7 @@
     }
 
     .ctrl-btn:hover {
-      background: rgba(255, 255, 255, 0.16);
+      background: rgba(255, 255, 255, 0.18);
       transform: scale(1.05);
     }
 
@@ -451,6 +474,12 @@
       background: rgba(239, 68, 68, 0.25);
       border-color: var(--accent-crimson);
       color: #fca5a5;
+    }
+
+    .ctrl-btn.active-mode {
+      background: rgba(6, 182, 212, 0.22);
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
     }
 
     .ctrl-btn.end-call {
@@ -544,14 +573,14 @@
       <video id="remoteVideo" class="remote-video" autoplay playsinline></video>
       <div id="waitingState" class="waiting-placeholder">
         <div class="waiting-pulse">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         </div>
-        <span>Waiting for other peer to connect video & voice...</span>
+        <span>Waiting for peer to connect...</span>
       </div>
     </div>
 
     <!-- Local Self-View (Picture-in-Picture, Muted to prevent echo) -->
-    <div id="localPipWrap" class="local-pip-wrap">
+    <div id="localPipWrap" class="local-pip-wrap" title="Tap to resize self-view">
       <video id="localVideo" class="local-video" autoplay playsinline muted></video>
     </div>
 
@@ -567,6 +596,11 @@
       <button type="button" id="btnToggleVideo" class="ctrl-btn" title="Turn Camera On / Off" aria-label="Toggle Video">
         <svg id="iconVideoOn" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
         <svg id="iconVideoOff" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;"><line x1="1" y1="1" x2="23" y2="23"/><path d="M21 15.5l-5-3.5 5-3.5v7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+      </button>
+
+      <!-- Toggle Video Framing Mode (Fit Full vs Fill Screen) -->
+      <button type="button" id="btnToggleFit" class="ctrl-btn" title="Toggle Fit (Uncropped) / Fill Screen" aria-label="Toggle Framing Mode">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
       </button>
 
       <!-- Switch Camera (Front / Back for Phones) -->
@@ -616,6 +650,7 @@
       const videoPeersListContainer = document.getElementById('videoPeersListContainer');
 
       const localVideo = document.getElementById('localVideo');
+      const localPipWrap = document.getElementById('localPipWrap');
       const remoteVideo = document.getElementById('remoteVideo');
       const waitingState = document.getElementById('waitingState');
 
@@ -627,6 +662,7 @@
       const iconVideoOn = document.getElementById('iconVideoOn');
       const iconVideoOff = document.getElementById('iconVideoOff');
 
+      const btnToggleFit = document.getElementById('btnToggleFit');
       const btnFlipCamera = document.getElementById('btnFlipCamera');
       const btnEndCall = document.getElementById('btnEndCall');
       const toastBox = document.getElementById('toastBox');
@@ -639,14 +675,15 @@
       let codename = '';
       let isAudioMuted = false;
       let isVideoOff = false;
-      let facingMode = 'user'; // 'user' (front) or 'environment' (back)
+      let isFillScreen = false;
+      let facingMode = 'user';
       let activePeers = [];
 
-      // ICE candidate queueing to eliminate race condition before setRemoteDescription
+      // ICE candidate queueing to eliminate race conditions
       let pendingCandidates = [];
       let isRemoteDescSet = false;
 
-      // Robust STUN servers for NAT / firewall traversal
+      // Multi-STUN server list for fast, reliable traversal
       const RTC_CONFIG = {
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
@@ -677,7 +714,7 @@
         videoCodenameInput.value = 'Agent-' + Math.floor(100 + Math.random() * 900);
       }
 
-      // Initialize Local Camera & Microphone with Resilient Fallback
+      // Initialize Camera & Microphone with Optimized Parameters
       const startMedia = async () => {
         if (localStream) {
           localStream.getTracks().forEach(t => t.stop());
@@ -686,14 +723,18 @@
 
         const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-        // Tier 1: Preferred High Quality Video + Audio
+        // Tier 1: Optimized High-Definition Video (Fluid 30fps) + Enhanced Audio
         try {
           const videoConstraints = isMobile
-            ? { facingMode: facingMode, width: { ideal: 1280 }, height: { ideal: 720 } }
-            : { width: { ideal: 1280 }, height: { ideal: 720 } };
+            ? { facingMode: facingMode, width: { ideal: 1280, max: 1920 }, height: { ideal: 720, max: 1080 }, frameRate: { ideal: 30, min: 20 } }
+            : { width: { ideal: 1280, max: 1920 }, height: { ideal: 720, max: 1080 }, frameRate: { ideal: 30, min: 20 } };
 
           localStream = await navigator.mediaDevices.getUserMedia({
-            audio: { echoCancellation: true, noiseSuppression: true },
+            audio: {
+              echoCancellation: { ideal: true },
+              noiseSuppression: { ideal: true },
+              autoGainControl: { ideal: true }
+            },
             video: videoConstraints
           });
           localVideo.srcObject = localStream;
@@ -742,6 +783,58 @@
         }
       };
 
+      // Completely flush and reset remote video buffer to eliminate frozen frame
+      const clearRemotePeer = (reason = 'Peer disconnected') => {
+        console.log('Resetting remote peer state:', reason);
+
+        // 1. Fully flush the HTML5 video element GPU buffer
+        if (remoteVideo) {
+          try {
+            remoteVideo.pause();
+            remoteVideo.srcObject = null;
+            remoteVideo.removeAttribute('src');
+            remoteVideo.load(); // CRITICAL: Immediately flushes last frame from GPU
+          } catch (e) {
+            console.warn('Error flushing remote video buffer:', e);
+          }
+        }
+
+        // 2. Stop and clear all remote tracks
+        if (remoteStream) {
+          try {
+            remoteStream.getTracks().forEach(track => {
+              track.stop();
+              remoteStream.removeTrack(track);
+            });
+          } catch (e) {}
+          remoteStream = null;
+        }
+
+        // 3. Close and destroy the RTCPeerConnection cleanly
+        if (peerConnection) {
+          try {
+            peerConnection.ontrack = null;
+            peerConnection.onicecandidate = null;
+            peerConnection.oniceconnectionstatechange = null;
+            peerConnection.onconnectionstatechange = null;
+            peerConnection.close();
+          } catch (e) {}
+          peerConnection = null;
+        }
+
+        isRemoteDescSet = false;
+        pendingCandidates = [];
+
+        // 4. Show the waiting placeholder
+        if (waitingState) {
+          waitingState.style.display = 'flex';
+        }
+
+        if (reason) {
+          showToast(reason);
+        }
+      };
+
       // Drain queued ICE candidates once remoteDescription is set
       const processPendingCandidates = async () => {
         isRemoteDescSet = true;
@@ -753,6 +846,25 @@
             console.warn('addIceCandidate error:', e);
           }
         }
+      };
+
+      // Optimize WebRTC Bitrate and Framerate for Smooth Fluid Video
+      const optimizeVideoSenders = () => {
+        if (!peerConnection) return;
+        peerConnection.getSenders().forEach(sender => {
+          if (sender.track && sender.track.kind === 'video' && sender.getParameters) {
+            try {
+              const params = sender.getParameters();
+              if (!params.encodings || params.encodings.length === 0) {
+                params.encodings = [{}];
+              }
+              params.encodings[0].maxBitrate = 1800000; // 1.8 Mbps for crisp HD
+              params.encodings[0].networkPriority = 'high';
+              params.degradationPreference = 'maintain-framerate'; // Smooth 30fps without stutter
+              sender.setParameters(params).catch(() => {});
+            } catch (e) {}
+          }
+        });
       };
 
       // Setup WebRTC PeerConnection
@@ -782,13 +894,21 @@
           peerConnection.addTransceiver('audio', { direction: 'recvonly' });
         }
 
-        // When remote track arrives (both audio voice and video)
+        optimizeVideoSenders();
+
+        // When remote track arrives
         peerConnection.ontrack = (event) => {
           console.log('⚡ Remote media track received:', event.track.kind);
+
           if (event.track) {
             if (!remoteStream.getTracks().find(t => t.id === event.track.id)) {
               remoteStream.addTrack(event.track);
             }
+            // If remote peer explicitly stops this track
+            event.track.onended = () => {
+              console.log('Remote track ended:', event.track.kind);
+              clearRemotePeer('Remote video stream ended');
+            };
           } else if (event.streams && event.streams[0]) {
             event.streams[0].getTracks().forEach(t => {
               if (!remoteStream.getTracks().find(x => x.id === t.id)) {
@@ -799,7 +919,7 @@
 
           waitingState.style.display = 'none';
 
-          // Play remote video & audio through device speakers/headphones
+          // Play remote video & audio through device speakers
           remoteVideo.play().catch(err => {
             console.warn('Autoplay restricted:', err);
             showToast('🔊 Tap anywhere to enable sound');
@@ -822,11 +942,12 @@
           if (peerConnection.iceConnectionState === 'connected' || peerConnection.iceConnectionState === 'completed') {
             waitingState.style.display = 'none';
             showToast('✓ Video & Audio connected');
+            optimizeVideoSenders();
           } else if (peerConnection.iceConnectionState === 'failed') {
-            console.warn('ICE connection failed, restarting ICE...');
-            if (peerConnection.restartIce) peerConnection.restartIce();
+            console.warn('ICE connection failed, clearing remote peer...');
+            clearRemotePeer('Connection dropped');
           } else if (peerConnection.iceConnectionState === 'disconnected') {
-            waitingState.style.display = 'flex';
+            clearRemotePeer('Peer disconnected');
           }
         };
 
@@ -834,8 +955,9 @@
           console.log('PC Connection state:', peerConnection.connectionState);
           if (peerConnection.connectionState === 'connected') {
             waitingState.style.display = 'none';
-          } else if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed') {
-            waitingState.style.display = 'flex';
+            optimizeVideoSenders();
+          } else if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed' || peerConnection.connectionState === 'closed') {
+            clearRemotePeer('Peer disconnected');
           }
         };
       };
@@ -865,14 +987,19 @@
               }
               updatePeerBadge();
 
-              // When another peer joins, initiate offer
+              // When another peer joins
               if (msg.event === 'join' && msg.peerId !== codename) {
                 showToast(`👤 ${msg.peerId} joined call`);
+                // If there was an old stale peer connection, reset it first
+                if (peerConnection) {
+                  clearRemotePeer(null);
+                }
                 createAndSendOffer();
               }
+
+              // When peer leaves: CLEAR VIDEO BUFFER IMMEDIATELY (no frozen frame!)
               if (msg.event === 'leave') {
-                showToast(`👤 A peer left the call`);
-                waitingState.style.display = 'flex';
+                clearRemotePeer(`👤 ${msg.peerId || 'A peer'} left the call`);
               }
             }
 
@@ -905,10 +1032,12 @@
                     signal: { answer: answer }
                   }));
                 }
+                optimizeVideoSenders();
               } else if (signal.answer) {
                 if (peerConnection && peerConnection.signalingState === 'have-local-offer') {
                   await peerConnection.setRemoteDescription(new RTCSessionDescription(signal.answer));
                   await processPendingCandidates();
+                  optimizeVideoSenders();
                 }
               } else if (signal.candidate) {
                 if (isRemoteDescSet && peerConnection && peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
@@ -940,6 +1069,7 @@
               signal: { offer: offer }
             }));
           }
+          optimizeVideoSenders();
         } catch (err) {
           console.error('Error creating offer:', err);
         }
@@ -1052,6 +1182,14 @@
         showToast(isVideoOff ? 'Camera Off' : 'Camera On');
       });
 
+      // Controls: Toggle Video Framing Mode (Fit Full View vs Fill Screen)
+      btnToggleFit.addEventListener('click', () => {
+        isFillScreen = !isFillScreen;
+        remoteVideo.classList.toggle('fill-screen', isFillScreen);
+        btnToggleFit.classList.toggle('active-mode', isFillScreen);
+        showToast(isFillScreen ? 'Framing: Fill Screen (Cropped)' : 'Framing: Fit Screen (Full View)');
+      });
+
       // Controls: Flip Camera (Front / Back on Mobile)
       btnFlipCamera.addEventListener('click', async () => {
         facingMode = facingMode === 'user' ? 'environment' : 'user';
@@ -1064,6 +1202,12 @@
           }
         }
         showToast('Flipped Camera');
+      });
+
+      // Tap on Picture-in-Picture to expand/minimize self-view
+      localPipWrap.addEventListener('click', (e) => {
+        e.stopPropagation();
+        localPipWrap.classList.toggle('pip-expanded');
       });
 
       // Tap screen to unblock sound if browser restricted autoplay
@@ -1082,16 +1226,17 @@
           localStream.getTracks().forEach(t => t.stop());
           localStream = null;
         }
-        if (peerConnection) {
-          peerConnection.close();
-          peerConnection = null;
-        }
+        clearRemotePeer(null);
+
         if (ws) {
-          ws.close();
+          try {
+            ws.send(JSON.stringify({ type: 'leave', roomId: currentRoom }));
+            ws.close();
+          } catch (e) {}
           ws = null;
         }
+
         localVideo.srcObject = null;
-        remoteVideo.srcObject = null;
         callStage.style.display = 'none';
         roomBadge.style.display = 'none';
         btnActivePeersVideo.style.display = 'none';
