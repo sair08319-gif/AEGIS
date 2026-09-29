@@ -212,9 +212,10 @@ wss.on('connection', (ws, req) => {
         }
 
         case 'webrtc_signal': {
-          if (!currentRoom || !rooms.has(currentRoom)) return;
+          const targetRoom = currentRoom || (typeof data.roomId === 'string' ? data.roomId.trim() : null);
+          if (!targetRoom || !rooms.has(targetRoom)) return;
           // Relay WebRTC P2P signals (offer, answer, candidate) to other peers
-          broadcastToRoom(currentRoom, {
+          broadcastToRoom(targetRoom, {
             type: 'webrtc_signal',
             signal: data.signal,
             sender: peerId

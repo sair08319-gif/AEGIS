@@ -76,14 +76,161 @@
       letter-spacing: -0.02em;
     }
 
+    .video-header-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .chat-peer-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #34d399;
+      font-size: 0.74rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      outline: none;
+    }
+
+    .chat-peer-btn:hover {
+      background: rgba(16, 185, 129, 0.22);
+      border-color: #34d399;
+    }
+
+    .status-indicator-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 8px #10b981;
+    }
+
     .room-badge {
       font-family: var(--font-mono);
       font-size: 0.72rem;
-      padding: 3px 8px;
+      padding: 4px 10px;
       border-radius: 999px;
       background: rgba(6, 182, 212, 0.12);
       border: 1px solid rgba(6, 182, 212, 0.3);
       color: var(--accent-cyan);
+    }
+
+    /* Active Peers Modal */
+    .peers-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .peers-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(3, 7, 18, 0.8);
+      backdrop-filter: blur(8px);
+    }
+
+    .peers-dialog {
+      position: relative;
+      z-index: 1000;
+      width: 100%;
+      max-width: 380px;
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.7);
+      animation: modalFadePop 0.2s ease-out;
+    }
+
+    @keyframes modalFadePop {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    .peers-dialog-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .peers-header-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .peers-header-left h4 {
+      font-family: var(--font-display, inherit);
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #f8fafc;
+      margin: 0;
+    }
+
+    .popover-close-btn {
+      background: none;
+      border: none;
+      color: #94a3b8;
+      font-size: 1.1rem;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 6px;
+      line-height: 1;
+    }
+
+    .popover-close-btn:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .peers-list-container {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 280px;
+      overflow-y: auto;
+    }
+
+    .peer-item-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 10px;
+    }
+
+    .peer-name-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.88rem;
+      color: #f1f5f9;
+    }
+
+    .peer-badge-you {
+      font-size: 0.68rem;
+      font-weight: 800;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: rgba(16, 185, 129, 0.18);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: #34d399;
+      letter-spacing: 0.05em;
     }
 
     /* Screen 1: Join Setup */
@@ -183,6 +330,7 @@
       align-items: center;
       justify-content: center;
       overflow: hidden;
+      cursor: pointer;
     }
 
     /* Remote Video Viewport */
@@ -213,6 +361,7 @@
       font-size: 0.9rem;
       text-align: center;
       padding: 20px;
+      pointer-events: none;
     }
 
     .waiting-pulse {
@@ -246,7 +395,6 @@
       box-shadow: 0 8px 25px rgba(0, 0, 0, 0.6);
       background: #07090e;
       z-index: 40;
-      cursor: move;
       transition: border-color 0.2s ease;
     }
 
@@ -332,6 +480,8 @@
       z-index: 100;
       display: none;
       animation: popoverFadeIn 0.2s ease-out;
+      text-align: center;
+      max-width: 90vw;
     }
 
     @keyframes popoverFadeIn {
@@ -350,7 +500,13 @@
       </div>
       <div class="brand-title">AEGIS VIDEO</div>
     </div>
-    <div id="roomBadge" class="room-badge" style="display: none;">Room: <span id="roomBadgeText"></span></div>
+    <div class="video-header-right">
+      <button type="button" id="btnActivePeersVideo" class="chat-peer-btn" style="display: none;" title="View members in room" aria-label="Active Peers">
+        <span class="status-indicator-dot"></span>
+        <span id="videoPeerCount">1</span> online
+      </button>
+      <div id="roomBadge" class="room-badge" style="display: none;">Room: <span id="roomBadgeText"></span></div>
+    </div>
   </header>
 
   <!-- Setup Screen -->
@@ -382,19 +538,19 @@
   </main>
 
   <!-- Active Call Stage -->
-  <main id="callStage" class="call-stage">
-    <!-- Remote Video -->
+  <main id="callStage" class="call-stage" title="Tap to enable sound">
+    <!-- Remote Video View (Unmuted so voice audio is heard) -->
     <div class="remote-video-wrap">
       <video id="remoteVideo" class="remote-video" autoplay playsinline></video>
       <div id="waitingState" class="waiting-placeholder">
         <div class="waiting-pulse">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         </div>
-        <span>Waiting for other peer to join channel...</span>
+        <span>Waiting for other peer to connect video & voice...</span>
       </div>
     </div>
 
-    <!-- Local Self-View (Picture-in-Picture) -->
+    <!-- Local Self-View (Picture-in-Picture, Muted to prevent echo) -->
     <div id="localPipWrap" class="local-pip-wrap">
       <video id="localVideo" class="local-video" autoplay playsinline muted></video>
     </div>
@@ -425,6 +581,21 @@
     </div>
   </main>
 
+  <!-- Active Peers List Modal -->
+  <div id="videoPeersModal" class="peers-modal" style="display: none;">
+    <div class="peers-backdrop" id="videoPeersBackdrop"></div>
+    <div class="peers-dialog">
+      <div class="peers-dialog-header">
+        <div class="peers-header-left">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <h4>Video Call Members</h4>
+        </div>
+        <button type="button" id="btnCloseVideoPeers" class="popover-close-btn" aria-label="Close">✕</button>
+      </div>
+      <div id="videoPeersListContainer" class="peers-list-container"></div>
+    </div>
+  </div>
+
   <div id="toastBox" class="toast-box"></div>
 
   <script>
@@ -436,6 +607,13 @@
       const videoCodenameInput = document.getElementById('videoCodenameInput');
       const roomBadge = document.getElementById('roomBadge');
       const roomBadgeText = document.getElementById('roomBadgeText');
+
+      const btnActivePeersVideo = document.getElementById('btnActivePeersVideo');
+      const videoPeerCount = document.getElementById('videoPeerCount');
+      const videoPeersModal = document.getElementById('videoPeersModal');
+      const videoPeersBackdrop = document.getElementById('videoPeersBackdrop');
+      const btnCloseVideoPeers = document.getElementById('btnCloseVideoPeers');
+      const videoPeersListContainer = document.getElementById('videoPeersListContainer');
 
       const localVideo = document.getElementById('localVideo');
       const remoteVideo = document.getElementById('remoteVideo');
@@ -456,23 +634,35 @@
       let ws = null;
       let peerConnection = null;
       let localStream = null;
+      let remoteStream = null;
       let currentRoom = '';
       let codename = '';
       let isAudioMuted = false;
       let isVideoOff = false;
       let facingMode = 'user'; // 'user' (front) or 'environment' (back)
+      let activePeers = [];
 
+      // ICE candidate queueing to eliminate race condition before setRemoteDescription
+      let pendingCandidates = [];
+      let isRemoteDescSet = false;
+
+      // Robust STUN servers for NAT / firewall traversal
       const RTC_CONFIG = {
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' }
-        ]
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' },
+          { urls: 'stun:stun3.l.google.com:19302' },
+          { urls: 'stun:stun4.l.google.com:19302' },
+          { urls: 'stun:stun.cloudflare.com:3478' }
+        ],
+        iceCandidatePoolSize: 10
       };
 
       const showToast = (msg) => {
         toastBox.textContent = msg;
         toastBox.style.display = 'block';
-        setTimeout(() => { toastBox.style.display = 'none'; }, 2400);
+        setTimeout(() => { toastBox.style.display = 'none'; }, 2600);
       };
 
       // Read Hash params if linked from chat
@@ -543,7 +733,7 @@
           btnToggleVideo.classList.add('off');
           iconVideoOn.style.display = 'none';
           iconVideoOff.style.display = 'block';
-          showToast('⚠️ Camera busy or unavailable. Connected with Audio-Only.');
+          showToast('⚠️ Camera busy. Connected with Audio-Only.');
           return true;
         } catch (e3) {
           console.error('Media stream error (audio & video both failed):', e3);
@@ -552,9 +742,29 @@
         }
       };
 
+      // Drain queued ICE candidates once remoteDescription is set
+      const processPendingCandidates = async () => {
+        isRemoteDescSet = true;
+        while (pendingCandidates.length > 0) {
+          const cand = pendingCandidates.shift();
+          try {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(cand));
+          } catch (e) {
+            console.warn('addIceCandidate error:', e);
+          }
+        }
+      };
+
       // Setup WebRTC PeerConnection
       const createPeerConnection = () => {
+        if (peerConnection) return;
         peerConnection = new RTCPeerConnection(RTC_CONFIG);
+        isRemoteDescSet = false;
+        pendingCandidates = [];
+
+        // Prepare remote stream sink
+        remoteStream = new MediaStream();
+        remoteVideo.srcObject = remoteStream;
 
         // Add local tracks
         if (localStream) {
@@ -563,12 +773,37 @@
           });
         }
 
-        // When remote track arrives
+        // Ensure transceivers exist for both audio and video
+        const kinds = localStream ? localStream.getTracks().map(t => t.kind) : [];
+        if (!kinds.includes('video')) {
+          peerConnection.addTransceiver('video', { direction: 'recvonly' });
+        }
+        if (!kinds.includes('audio')) {
+          peerConnection.addTransceiver('audio', { direction: 'recvonly' });
+        }
+
+        // When remote track arrives (both audio voice and video)
         peerConnection.ontrack = (event) => {
-          if (event.streams && event.streams[0]) {
-            remoteVideo.srcObject = event.streams[0];
-            waitingState.style.display = 'none';
+          console.log('⚡ Remote media track received:', event.track.kind);
+          if (event.track) {
+            if (!remoteStream.getTracks().find(t => t.id === event.track.id)) {
+              remoteStream.addTrack(event.track);
+            }
+          } else if (event.streams && event.streams[0]) {
+            event.streams[0].getTracks().forEach(t => {
+              if (!remoteStream.getTracks().find(x => x.id === t.id)) {
+                remoteStream.addTrack(t);
+              }
+            });
           }
+
+          waitingState.style.display = 'none';
+
+          // Play remote video & audio through device speakers/headphones
+          remoteVideo.play().catch(err => {
+            console.warn('Autoplay restricted:', err);
+            showToast('🔊 Tap anywhere to enable sound');
+          });
         };
 
         // ICE candidate generation
@@ -582,8 +817,24 @@
           }
         };
 
+        peerConnection.oniceconnectionstatechange = () => {
+          console.log('ICE Connection state:', peerConnection.iceConnectionState);
+          if (peerConnection.iceConnectionState === 'connected' || peerConnection.iceConnectionState === 'completed') {
+            waitingState.style.display = 'none';
+            showToast('✓ Video & Audio connected');
+          } else if (peerConnection.iceConnectionState === 'failed') {
+            console.warn('ICE connection failed, restarting ICE...');
+            if (peerConnection.restartIce) peerConnection.restartIce();
+          } else if (peerConnection.iceConnectionState === 'disconnected') {
+            waitingState.style.display = 'flex';
+          }
+        };
+
         peerConnection.onconnectionstatechange = () => {
-          if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed') {
+          console.log('PC Connection state:', peerConnection.connectionState);
+          if (peerConnection.connectionState === 'connected') {
+            waitingState.style.display = 'none';
+          } else if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed') {
             waitingState.style.display = 'flex';
           }
         };
@@ -607,6 +858,13 @@
             const msg = JSON.parse(evt.data);
 
             if (msg.type === 'presence') {
+              if (msg.peers && Array.isArray(msg.peers)) {
+                activePeers = msg.peers;
+              } else {
+                activePeers = [codename];
+              }
+              updatePeerBadge();
+
               // When another peer joins, initiate offer
               if (msg.event === 'join' && msg.peerId !== codename) {
                 showToast(`👤 ${msg.peerId} joined call`);
@@ -623,23 +881,44 @@
 
               if (signal.offer) {
                 if (!peerConnection) createPeerConnection();
-                await peerConnection.setRemoteDescription(new RTCSessionDescription(signal.offer));
+
+                // Glare / collision protection: if we sent an offer simultaneously, roll back cleanly
+                if (peerConnection.signalingState !== 'stable') {
+                  console.warn('Glare collision: rolling back local offer to accept remote offer');
+                  await Promise.all([
+                    peerConnection.setLocalDescription({ type: 'rollback' }),
+                    peerConnection.setRemoteDescription(new RTCSessionDescription(signal.offer))
+                  ]);
+                } else {
+                  await peerConnection.setRemoteDescription(new RTCSessionDescription(signal.offer));
+                }
+
+                await processPendingCandidates();
+
                 const answer = await peerConnection.createAnswer();
                 await peerConnection.setLocalDescription(answer);
-                ws.send(JSON.stringify({
-                  type: 'webrtc_signal',
-                  roomId: currentRoom,
-                  signal: { answer: answer }
-                }));
+
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                  ws.send(JSON.stringify({
+                    type: 'webrtc_signal',
+                    roomId: currentRoom,
+                    signal: { answer: answer }
+                  }));
+                }
               } else if (signal.answer) {
-                if (peerConnection) {
+                if (peerConnection && peerConnection.signalingState === 'have-local-offer') {
                   await peerConnection.setRemoteDescription(new RTCSessionDescription(signal.answer));
+                  await processPendingCandidates();
                 }
               } else if (signal.candidate) {
-                if (peerConnection) {
+                if (isRemoteDescSet && peerConnection && peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
                   try {
                     await peerConnection.addIceCandidate(new RTCIceCandidate(signal.candidate));
-                  } catch (e) {}
+                  } catch (e) {
+                    console.warn('addIceCandidate error:', e);
+                  }
+                } else {
+                  pendingCandidates.push(signal.candidate);
                 }
               }
             }
@@ -651,16 +930,52 @@
 
       const createAndSendOffer = async () => {
         if (!peerConnection) createPeerConnection();
-        const offer = await peerConnection.createOffer();
-        await peerConnection.setLocalDescription(offer);
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({
-            type: 'webrtc_signal',
-            roomId: currentRoom,
-            signal: { offer: offer }
-          }));
+        try {
+          const offer = await peerConnection.createOffer();
+          await peerConnection.setLocalDescription(offer);
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+              type: 'webrtc_signal',
+              roomId: currentRoom,
+              signal: { offer: offer }
+            }));
+          }
+        } catch (err) {
+          console.error('Error creating offer:', err);
         }
       };
+
+      const updatePeerBadge = () => {
+        const count = activePeers.length || 1;
+        videoPeerCount.textContent = count;
+        btnActivePeersVideo.style.display = 'inline-flex';
+      };
+
+      // Active Peers Modal Trigger
+      btnActivePeersVideo.addEventListener('click', () => {
+        videoPeersListContainer.innerHTML = '';
+        const list = (activePeers && activePeers.length > 0) ? activePeers : [codename];
+        list.forEach(name => {
+          const item = document.createElement('div');
+          item.className = 'peer-item-card';
+          const isYou = (name === codename);
+          item.innerHTML = `
+            <div class="peer-name-wrap">
+              <span style="font-size: 1.1rem;">👤</span>
+              <span style="font-weight: 600;">${name}</span>
+            </div>
+            ${isYou ? '<span class="peer-badge-you">YOU</span>' : '<span style="color: #34d399; font-size: 0.72rem; font-weight: 600;">● In Call</span>'}
+          `;
+          videoPeersListContainer.appendChild(item);
+        });
+        videoPeersModal.style.display = 'flex';
+      });
+
+      const closeVideoPeersModal = () => {
+        videoPeersModal.style.display = 'none';
+      };
+      btnCloseVideoPeers.addEventListener('click', closeVideoPeersModal);
+      videoPeersBackdrop.addEventListener('click', closeVideoPeersModal);
 
       // Join Form Submit
       videoJoinForm.addEventListener('submit', async (e) => {
@@ -682,6 +997,14 @@
         roomBadge.style.display = 'block';
 
         showToast('📞 Video channel ready');
+
+        // Negotiation watchdog: if 2 peers are present and no connection within 3.5s, trigger offer
+        setTimeout(() => {
+          if (peerConnection && activePeers.length > 1 && (!remoteStream || remoteStream.getTracks().length === 0)) {
+            console.log('Watchdog: triggering offer renegotiation...');
+            createAndSendOffer();
+          }
+        }, 3500);
       });
 
       // Controls: Mute Audio
@@ -729,7 +1052,7 @@
         showToast(isVideoOff ? 'Camera Off' : 'Camera On');
       });
 
-      // Controls: Flip Camera
+      // Controls: Flip Camera (Front / Back on Mobile)
       btnFlipCamera.addEventListener('click', async () => {
         facingMode = facingMode === 'user' ? 'environment' : 'user';
         const ok = await startMedia();
@@ -741,6 +1064,16 @@
           }
         }
         showToast('Flipped Camera');
+      });
+
+      // Tap screen to unblock sound if browser restricted autoplay
+      callStage.addEventListener('click', (e) => {
+        if (e.target.closest('.call-controls-bar')) return;
+        if (remoteVideo && remoteVideo.paused) {
+          remoteVideo.play().then(() => {
+            showToast('🔊 Audio enabled');
+          }).catch(() => {});
+        }
       });
 
       // Controls: End Call
@@ -761,6 +1094,7 @@
         remoteVideo.srcObject = null;
         callStage.style.display = 'none';
         roomBadge.style.display = 'none';
+        btnActivePeersVideo.style.display = 'none';
         setupScreen.style.display = 'flex';
         waitingState.style.display = 'flex';
         showToast('Call ended');
