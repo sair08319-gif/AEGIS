@@ -1,0 +1,16 @@
+{
+  "name": "secure-stealth-chat",
+  "version": "1.0.0",
+  "description": "Zero-knowledge end-to-end encrypted ephemeral communication app",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "crypto-js": "^4.2.0",
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

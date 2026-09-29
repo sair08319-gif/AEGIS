@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aegis Stealth | Zero-Knowledge E2EE Chat</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- Fallback font styling when offline -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- Camouflage Decoy Screen (Panic Triggered) -->
+  <div id="decoyScreen" class="decoy-screen">
+    <div class="decoy-search-box">
+      <div class="decoy-logo">Search Engine</div>
+      <input type="text" class="decoy-input" placeholder="Search the web or type a URL..." autofocus>
+      <div class="decoy-hint">Tip: Press ESC 3 times to unlock stealth console.</div>
+    </div>
+  </div>
+
+  <div class="app-container">
+    <!-- Top Secure Header -->
+    <header class="site-header">
+      <div class="brand-wrapper">
+        <div class="brand-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+        </div>
+        <div class="brand-title">AEGIS</div>
+      </div>
+
+      <!-- Center Minimalist Symbol Dock (Visible in Chat) -->
+      <div id="headerSymbolDock" class="symbol-dock" style="display: none;">
+        <!-- Shield Icon -->
+        <button type="button" class="dock-btn" id="shieldIndicator" data-symbol="shield" data-tooltip="Anti-Snoop Shield: Active" aria-label="Anti-Snoop Shield">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span class="dock-dot ok" id="shieldDot"></span>
+          <span id="shieldLabel" style="display: none;">SHIELD: ARMED</span>
+        </button>
+
+        <!-- Lock / E2EE Icon -->
+        <button type="button" class="dock-btn" id="cryptoIndicator" data-symbol="crypto" data-tooltip="E2EE: AES-256 + 2KB Padding" aria-label="Encryption Status">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <span class="status-dot" id="statusDot"></span>
+          <span id="cryptoStatusLabel" style="display: none;">AES-256 READY</span>
+        </button>
+
+        <!-- Room / Channel Frequency Icon -->
+        <button type="button" class="dock-btn" id="roomDockBtn" data-symbol="room" data-tooltip="Channel Frequency" aria-label="Active Channel">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.2 19.1 19.1"/></svg>
+          <span id="activeRoomLabel" style="display: none;">room</span>
+        </button>
+
+        <!-- Connected Peers Icon -->
+        <button type="button" class="dock-btn" id="peerDockBtn" data-symbol="peers" data-tooltip="Active Peers" aria-label="Connected Peers">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span id="peerCountLabel" class="dock-counter">1</span>
+        </button>
+
+        <!-- Chaff Traffic Pulse -->
+        <button type="button" class="dock-btn" id="chaffStatusBadge" data-symbol="chaff" data-tooltip="Chaff Noise Traffic" aria-label="Chaff Traffic">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <span class="dock-dot pulse-cyan"></span>
+        </button>
+
+        <!-- Safety Fingerprint Emojis -->
+        <button type="button" class="dock-btn fingerprint-btn" id="safetyFingerprintBadge" data-symbol="fingerprint" data-tooltip="Safety Fingerprint (SAS)" aria-label="Safety Fingerprint">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><path d="M12 2a10 10 0 0 0-10 10c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.1-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z"/></svg>
+          <span id="safetyFingerprintCode" class="fp-mini-text">••••</span>
+        </button>
+      </div>
+
+      <!-- Right Action Tools -->
+      <div class="header-status-group">
+        <!-- Chat Action Icons (Visible in Chat) -->
+        <div id="chatActionGroup" class="symbol-dock actions-dock" style="display: none;">
+          <!-- Burn Timer Icon & Interactive Popover Trigger -->
+          <button type="button" class="dock-btn" id="btnBurnTimerDock" data-symbol="burn" data-tooltip="Auto-Burn: 15s" aria-label="Auto-Burn Timer">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
+            <span id="burnTimerBadge" class="dock-badge-text">15s</span>
+            <!-- Hidden native select for backend compatibility -->
+            <select id="burnTimerSelect" style="display: none;">
+              <option value="0">Off</option>
+              <option value="15" selected>15s</option>
+              <option value="30">30s</option>
+              <option value="60">60s</option>
+              <option value="300">5m</option>
+            </select>
+          </button>
+
+          <!-- Ciphertext Toggle Icon -->
+          <button type="button" id="btnToggleRawCipher" class="dock-btn" data-symbol="cipher" data-tooltip="Inspect Raw Ciphertext" aria-label="Inspect Raw Ciphertext">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          </button>
+
+          <!-- Copy Invite Link Icon -->
+          <button type="button" id="btnShareInvite" class="dock-btn" data-symbol="share" data-tooltip="Copy Secret Invite Link" aria-label="Copy Secret Invite Link">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          </button>
+
+          <!-- Exit Room Icon -->
+          <button type="button" id="btnLeaveRoom" class="dock-btn danger" data-symbol="exit" data-tooltip="Exit Channel & Wipe RAM" aria-label="Exit Channel">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          </button>
+        </div>
+
+        <!-- Wipe Button (Destroy Room & Close Tab) -->
+        <button id="panicBtn" class="panic-btn-mini wipe-btn" data-symbol="wipe" data-tooltip="WIPE: Destroy room & close tab" aria-label="Wipe and Destroy Room">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+          <span>WIPE</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Real-Time Security Warning Alert Banner -->
+    <div id="securityAlertBanner" class="security-alert-banner" style="display: none;">
+      <div class="alert-content">
+        <span class="alert-icon">🚨</span>
+        <div class="alert-text">
+          <strong id="alertTitle">SNOOPING ATTEMPT BLOCKED!</strong>
+          <span id="alertDetails">A browser extension or external script attempted to read or inject into the chat DOM. The attempt was quarantined.</span>
+        </div>
+      </div>
+      <button type="button" id="btnDismissAlert" class="alert-close-btn">✕ Dismiss</button>
+    </div>
+
+    <!-- SCREEN 1: LOBBY / SETUP -->
+    <main id="screenLobby" class="screen-lobby">
+      <div class="lobby-card">
+        <div class="lobby-header">
+          <h2>Zero-Knowledge Stealth Chat</h2>
+          <p>End-to-End military-grade encryption. Messages are encrypted locally in your browser memory before sending. The network and server see only mathematical noise.</p>
+        </div>
+
+        <div class="security-highlights">
+          <div class="highlight-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <span>AES-GCM-256 bit</span>
+          </div>
+          <div class="highlight-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+            <span>Zero Disk Storage</span>
+          </div>
+          <div class="highlight-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            <span>Zero-Knowledge Relay</span>
+          </div>
+          <div class="highlight-item">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            <span>Auto-Burn Ephemeral</span>
+          </div>
+        </div>
+
+        <form id="joinForm">
+          <div class="form-group">
+            <label class="form-label" for="usernameInput">
+              <span>Your Codename</span>
+            </label>
+            <div class="input-wrapper">
+              <input type="text" id="usernameInput" class="input-field" placeholder="e.g. Agent-X" required maxlength="20" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false">
+              <button type="button" id="btnRandomCodename" class="input-addon-btn">Random</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="roomInput">
+              <span>Room ID / Frequency</span>
+              <button type="button" id="btnGenRoom" class="label-action">Generate Random</button>
+            </label>
+            <div class="input-wrapper">
+              <input type="text" id="roomInput" class="input-field" placeholder="e.g. shadow-779" required autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="passphraseInput">
+              <span>Secret Decryption Passphrase</span>
+              <button type="button" id="btnGenKey" class="label-action">Generate Strong Key</button>
+            </label>
+            <div class="input-wrapper">
+              <input type="password" id="passphraseInput" class="input-field" placeholder="Shared secret passphrase (never sent to server)" required autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false">
+              <button type="button" id="btnTogglePass" class="input-addon-btn">Show</button>
+            </div>
+          </div>
+
+          <button type="submit" id="btnEnterRoom" class="join-btn">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+            Initialize Secure Terminal
+          </button>
+        </form>
+
+        <!-- Local Wi-Fi / Hotspot Connection Helper -->
+        <div class="network-info-box">
+          <div class="network-info-header">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+            <span>Connect from Other Devices (Hotspot / LAN):</span>
+          </div>
+          <p style="color: #64748b; margin-bottom: 6px; font-size: 0.76rem;">Other phones/laptops connected to your Wi-Fi or hotspot can open this address:</p>
+          <div id="localIpContainer" class="ip-list">
+            <span class="ip-tag">Detecting network interfaces...</span>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- SCREEN 2: SECURE CHAT INTERFACE -->
+    <main id="screenChat" class="screen-chat" style="display: none;">
+      <!-- Messages Viewport -->
+      <div id="messagesViewport" class="messages-viewport">
+        <div class="channel-start-pill">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span>End-to-End Encrypted &bull; 2KB Envelope Masking &bull; Zero Server Retention</span>
+        </div>
+      </div>
+
+      <!-- Live Typing Bar -->
+      <div id="typingBar" class="typing-bar"></div>
+
+      <!-- Pending In-Memory Image Preview -->
+      <div id="imagePreviewContainer" class="image-preview-container" style="display: none;">
+        <div class="image-preview-card">
+          <img id="imagePreviewThumb" src="" alt="Thumbnail" class="preview-thumbnail">
+          <div class="preview-info">
+            <span id="imagePreviewName" class="preview-name">photo.jpg</span>
+            <span id="imagePreviewSize" class="preview-size">0 KB &bull; In-Memory Base64</span>
+          </div>
+          <button type="button" id="btnCancelImage" class="preview-cancel-btn" title="Remove Photo">✕</button>
+        </div>
+      </div>
+
+      <!-- Chat Input Area -->
+      <form id="chatForm" class="chat-input-area">
+        <!-- Hidden Photo File Input -->
+        <input type="file" id="imageFileInput" accept="image/*" style="display: none;">
+
+        <!-- Photo Attachment Button -->
+        <button type="button" id="btnAttachImage" class="chat-attach-btn" data-tooltip="Attach Photo (Zero-Cloud Base64)" aria-label="Attach Photo">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        </button>
+
+        <input type="text" id="messageInput" class="chat-input-box" placeholder="Type encrypted message (or paste photo)..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false">
+        <button type="submit" class="send-msg-btn" title="Encrypt & Send">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
+      </form>
+    </main>
+  </div>
+
+  <!-- Zero-Knowledge Image Lightbox Modal -->
+  <div id="imageLightboxModal" class="image-lightbox-modal" style="display: none;">
+    <div class="lightbox-backdrop" id="lightboxBackdrop"></div>
+    <div class="lightbox-dialog">
+      <img id="lightboxImg" src="" alt="Enlarged view">
+      <button type="button" id="lightboxCloseBtn" class="lightbox-close-btn" title="Close preview">✕</button>
+    </div>
+  </div>
+
+  <!-- Interactive Floating Symbol Popover Card -->
+  <div id="symbolPopoverCard" class="symbol-popover-card" style="display: none;">
+    <div class="popover-arrow"></div>
+    <div class="popover-header">
+      <div class="popover-title-row">
+        <span class="popover-icon" id="popoverIcon">🛡️</span>
+        <h4 id="popoverTitle">Title</h4>
+      </div>
+      <button type="button" class="popover-close-btn" id="popoverCloseBtn" aria-label="Close">✕</button>
+    </div>
+    <div class="popover-body" id="popoverBody">Description here</div>
+    <div class="popover-interactive-area" id="popoverInteractiveArea" style="display: none;"></div>
+    <div class="popover-footer" id="popoverFooter">
+      <span class="popover-status-badge" id="popoverStatusBadge">ACTIVE</span>
+    </div>
+  </div>
+
+  <!-- Floating Toast Notification -->
+  <div id="stealthToast" class="stealth-toast" style="display: none;"></div>
+
+  <!-- Scripts -->
+  <script src="crypto-js.js"></script>
+  <script src="crypto.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
