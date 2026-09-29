@@ -382,6 +382,7 @@
   };
 
   const loadNetworkInfo = async () => {
+    if (!localIpContainer) return;
     try {
       const res = await fetch('/api/network-info');
       const data = await res.json();

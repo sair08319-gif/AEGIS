@@ -131,79 +131,53 @@
     <!-- SCREEN 1: LOBBY / SETUP -->
     <main id="screenLobby" class="screen-lobby">
       <div class="lobby-card">
-        <div class="lobby-header">
-          <h2>Zero-Knowledge Stealth Chat</h2>
-          <p>End-to-End military-grade encryption. Messages are encrypted locally in your browser memory before sending. The network and server see only mathematical noise.</p>
-        </div>
-
-        <div class="security-highlights">
-          <div class="highlight-item">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            <span>AES-GCM-256 bit</span>
+        <div class="lobby-header-clean">
+          <div class="lobby-shield-icon">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
           </div>
-          <div class="highlight-item">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
-            <span>Zero Disk Storage</span>
-          </div>
-          <div class="highlight-item">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-            <span>Zero-Knowledge Relay</span>
-          </div>
-          <div class="highlight-item">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-            <span>Auto-Burn Ephemeral</span>
-          </div>
+          <h2>AEGIS</h2>
+          <p>Encrypted &bull; Ephemeral &bull; Zero Traces</p>
         </div>
 
         <form id="joinForm">
           <div class="form-group">
             <label class="form-label" for="usernameInput">
-              <span>Your Codename</span>
+              <span>Codename</span>
             </label>
             <div class="input-wrapper">
-              <input type="text" id="usernameInput" class="input-field" placeholder="e.g. Agent-X" required maxlength="20" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false">
+              <input type="text" id="usernameInput" class="input-field" placeholder="e.g. Agent-X" required maxlength="20" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
               <button type="button" id="btnRandomCodename" class="input-addon-btn">Random</button>
             </div>
           </div>
 
           <div class="form-group">
             <label class="form-label" for="roomInput">
-              <span>Room ID / Frequency</span>
-              <button type="button" id="btnGenRoom" class="label-action">Generate Random</button>
+              <span>Channel / Room</span>
+              <button type="button" id="btnGenRoom" class="label-action">Random</button>
             </label>
             <div class="input-wrapper">
-              <input type="text" id="roomInput" class="input-field" placeholder="e.g. shadow-779" required autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false">
+              <input type="text" id="roomInput" class="input-field" placeholder="e.g. shadow-779" required autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
             </div>
           </div>
 
           <div class="form-group">
             <label class="form-label" for="passphraseInput">
-              <span>Secret Decryption Passphrase</span>
-              <button type="button" id="btnGenKey" class="label-action">Generate Strong Key</button>
+              <span>Secret Key / Passphrase</span>
+              <button type="button" id="btnGenKey" class="label-action">Generate Strong</button>
             </label>
             <div class="input-wrapper">
-              <input type="password" id="passphraseInput" class="input-field" placeholder="Shared secret passphrase (never sent to server)" required autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-gramm="false" data-gramm_editor="false" data-enable-grammarly="false">
+              <input type="password" id="passphraseInput" class="input-field" placeholder="Shared secret passphrase" required autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
               <button type="button" id="btnTogglePass" class="input-addon-btn">Show</button>
             </div>
           </div>
 
           <button type="submit" id="btnEnterRoom" class="join-btn">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
-            Initialize Secure Terminal
+            Enter Channel
           </button>
         </form>
-
-        <!-- Local Wi-Fi / Hotspot Connection Helper -->
-        <div class="network-info-box">
-          <div class="network-info-header">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
-            <span>Connect from Other Devices (Hotspot / LAN):</span>
-          </div>
-          <p style="color: #64748b; margin-bottom: 6px; font-size: 0.76rem;">Other phones/laptops connected to your Wi-Fi or hotspot can open this address:</p>
-          <div id="localIpContainer" class="ip-list">
-            <span class="ip-tag">Detecting network interfaces...</span>
-          </div>
-        </div>
       </div>
     </main>
 
