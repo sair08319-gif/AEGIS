@@ -487,25 +487,67 @@
         videoCodenameInput.value = 'Agent-' + Math.floor(100 + Math.random() * 900);
       }
 
-      // Initialize Local Camera & Microphone
+      // Initialize Local Camera & Microphone with Resilient Fallback
       const startMedia = async () => {
+        if (localStream) {
+          localStream.getTracks().forEach(t => t.stop());
+          localStream = null;
+        }
+
+        const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+        // Tier 1: Preferred High Quality Video + Audio
         try {
-          if (localStream) {
-            localStream.getTracks().forEach(t => t.stop());
-          }
+          const videoConstraints = isMobile
+            ? { facingMode: facingMode, width: { ideal: 1280 }, height: { ideal: 720 } }
+            : { width: { ideal: 1280 }, height: { ideal: 720 } };
+
           localStream = await navigator.mediaDevices.getUserMedia({
-            audio: true,
-            video: {
-              facingMode: facingMode,
-              width: { ideal: 1280 },
-              height: { ideal: 720 }
-            }
+            audio: { echoCancellation: true, noiseSuppression: true },
+            video: videoConstraints
           });
           localVideo.srcObject = localStream;
+          isVideoOff = false;
+          btnToggleVideo.classList.remove('off');
+          iconVideoOn.style.display = 'block';
+          iconVideoOff.style.display = 'none';
           return true;
-        } catch (err) {
-          console.error('Media stream error:', err);
-          alert('Camera / Microphone permission denied or unavailable: ' + err.message);
+        } catch (e1) {
+          console.warn('Preferred video constraints failed, trying basic video...', e1);
+        }
+
+        // Tier 2: Basic Video + Audio (relaxed constraints)
+        try {
+          localStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: true
+          });
+          localVideo.srcObject = localStream;
+          isVideoOff = false;
+          btnToggleVideo.classList.remove('off');
+          iconVideoOn.style.display = 'block';
+          iconVideoOff.style.display = 'none';
+          return true;
+        } catch (e2) {
+          console.warn('Basic video failed, falling back to Audio-Only...', e2);
+        }
+
+        // Tier 3: Audio-Only Fallback (Webcam is in use, locked, or unavailable)
+        try {
+          localStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: false
+          });
+          localVideo.srcObject = localStream;
+          isVideoOff = true;
+          btnToggleVideo.classList.add('off');
+          iconVideoOn.style.display = 'none';
+          iconVideoOff.style.display = 'block';
+          showToast('⚠️ Camera busy or unavailable. Connected with Audio-Only.');
+          return true;
+        } catch (e3) {
+          console.error('Media stream error (audio & video both failed):', e3);
+          alert('Microphone/Camera access failed: ' + (e3.name || 'Error') + ' - ' + (e3.message || 'Permission denied') + '.\nPlease check permissions in your browser URL bar.');
           return false;
         }
       };
@@ -654,10 +696,33 @@
       });
 
       // Controls: Toggle Video
-      btnToggleVideo.addEventListener('click', () => {
+      btnToggleVideo.addEventListener('click', async () => {
         if (!localStream) return;
+        const videoTracks = localStream.getVideoTracks();
+        if (videoTracks.length === 0) {
+          // If started as audio-only, try acquiring video track
+          try {
+            const vStream = await navigator.mediaDevices.getUserMedia({ video: true });
+            const vTrack = vStream.getVideoTracks()[0];
+            localStream.addTrack(vTrack);
+            localVideo.srcObject = localStream;
+            if (peerConnection) {
+              peerConnection.addTrack(vTrack, localStream);
+              createAndSendOffer();
+            }
+            isVideoOff = false;
+            btnToggleVideo.classList.remove('off');
+            iconVideoOn.style.display = 'block';
+            iconVideoOff.style.display = 'none';
+            showToast('📹 Camera activated');
+            return;
+          } catch (e) {
+            showToast('⚠️ Could not start camera: ' + (e.message || 'Camera busy'));
+            return;
+          }
+        }
         isVideoOff = !isVideoOff;
-        localStream.getVideoTracks().forEach(t => t.enabled = !isVideoOff);
+        videoTracks.forEach(t => t.enabled = !isVideoOff);
         btnToggleVideo.classList.toggle('off', isVideoOff);
         iconVideoOn.style.display = isVideoOff ? 'none' : 'block';
         iconVideoOff.style.display = isVideoOff ? 'block' : 'none';

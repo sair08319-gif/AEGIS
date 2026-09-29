@@ -160,6 +160,8 @@
 
     if (shieldLabel) {
       shieldLabel.textContent = `BLOCKED (${blockedAttemptsCount})`;
+    }
+    if (shieldIndicator) {
       shieldIndicator.style.color = 'var(--accent-crimson)';
       const dot = shieldIndicator.querySelector('.status-dot');
       if (dot) dot.style.background = 'var(--accent-crimson)';
@@ -279,14 +281,6 @@
       passphraseInput.type = 'password';
       btnTogglePass.textContent = 'Show';
     }
-  });
-
-  btnToggleRawCipher.addEventListener('click', () => {
-    showCiphertext = !showCiphertext;
-    btnToggleRawCipher.classList.toggle('active', showCiphertext);
-    document.querySelectorAll('.raw-cipher-preview').forEach(el => {
-      el.style.display = showCiphertext ? 'block' : 'none';
-    });
   });
 
   // IN-MEMORY ZERO-CLOUD IMAGE PROCESSOR
@@ -903,8 +897,10 @@
         chaffPacketsReceived++;
         updateChaffUI();
         // Subtle micro-flash on security status dot
-        statusDot.style.transform = 'scale(1.4)';
-        setTimeout(() => { statusDot.style.transform = 'scale(1)'; }, 150);
+        if (statusDot) {
+          statusDot.style.transform = 'scale(1.4)';
+          setTimeout(() => { if (statusDot) statusDot.style.transform = 'scale(1)'; }, 150);
+        }
         return;
       }
 
