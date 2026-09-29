@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Aegis Video | Peer-to-Peer Encrypted Calling</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #07090e;
+      --bg-card: rgba(16, 22, 34, 0.85);
+      --accent-emerald: #10b981;
+      --accent-cyan: #06b6d4;
+      --accent-crimson: #ef4444;
+      --border-color: rgba(255, 255, 255, 0.08);
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-display: 'Outfit', var(--font-sans);
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background-color: var(--bg-primary);
+      color: #f1f5f9;
+      font-family: var(--font-sans);
+      min-height: 100vh;
+      min-height: 100dvh;
+      height: 100dvh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Header */
+    .video-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: max(10px, env(safe-area-inset-top, 0px)) 16px 10px 16px;
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border-color);
+      z-index: 50;
+    }
+
+    .brand-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, rgba(6, 182, 212, 0.2), rgba(16, 185, 129, 0.2));
+      border: 1px solid var(--accent-cyan);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent-cyan);
+    }
+
+    .brand-title {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 1.1rem;
+      letter-spacing: -0.02em;
+    }
+
+    .room-badge {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(6, 182, 212, 0.12);
+      border: 1px solid rgba(6, 182, 212, 0.3);
+      color: var(--accent-cyan);
+    }
+
+    /* Screen 1: Join Setup */
+    .setup-screen {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      overflow-y: auto;
+    }
+
+    .setup-card {
+      width: 100%;
+      max-width: 420px;
+      background: var(--bg-card);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--border-color);
+      border-radius: 18px;
+      padding: 28px 22px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+      text-align: center;
+    }
+
+    .setup-card h2 {
+      font-family: var(--font-display);
+      font-size: 1.5rem;
+      margin-bottom: 6px;
+    }
+
+    .setup-card p {
+      color: #94a3b8;
+      font-size: 0.85rem;
+      margin-bottom: 22px;
+    }
+
+    .form-group {
+      text-align: left;
+      margin-bottom: 16px;
+    }
+
+    .form-label {
+      font-size: 0.82rem;
+      color: #94a3b8;
+      margin-bottom: 6px;
+      display: block;
+      font-weight: 600;
+    }
+
+    .input-field {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 12px 14px;
+      color: #fff;
+      font-size: 16px !important; /* Prevents iOS auto-zoom */
+      font-family: var(--font-mono);
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    .input-field:focus {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 15px rgba(6, 182, 212, 0.25);
+    }
+
+    .join-btn {
+      width: 100%;
+      background: linear-gradient(135deg, var(--accent-cyan), #0891b2);
+      color: #032029;
+      border: none;
+      border-radius: 12px;
+      padding: 14px;
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+      margin-top: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .join-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 20px rgba(6, 182, 212, 0.4);
+    }
+
+    /* Screen 2: Call Stage */
+    .call-stage {
+      flex: 1;
+      position: relative;
+      background: #000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    /* Remote Video Viewport */
+    .remote-video-wrap {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #04060a;
+    }
+
+    .remote-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .waiting-placeholder {
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      color: #64748b;
+      font-size: 0.9rem;
+      text-align: center;
+      padding: 20px;
+    }
+
+    .waiting-pulse {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: rgba(6, 182, 212, 0.1);
+      border: 1px solid rgba(6, 182, 212, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: pulse-ring 2s infinite;
+      color: var(--accent-cyan);
+    }
+
+    @keyframes pulse-ring {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.1); opacity: 0.5; }
+    }
+
+    /* Local Picture-in-Picture Video */
+    .local-pip-wrap {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      width: 110px;
+      height: 155px;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.6);
+      background: #07090e;
+      z-index: 40;
+      cursor: move;
+      transition: border-color 0.2s ease;
+    }
+
+    .local-pip-wrap:hover {
+      border-color: var(--accent-cyan);
+    }
+
+    .local-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1); /* Mirror local self-view */
+    }
+
+    /* Call Controls Floating Dock */
+    .call-controls-bar {
+      position: absolute;
+      bottom: max(16px, env(safe-area-inset-bottom, 16px));
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      background: rgba(13, 17, 26, 0.88);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 999px;
+      z-index: 50;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+    }
+
+    .ctrl-btn {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.18s ease;
+      outline: none;
+    }
+
+    .ctrl-btn:hover {
+      background: rgba(255, 255, 255, 0.16);
+      transform: scale(1.05);
+    }
+
+    .ctrl-btn.off {
+      background: rgba(239, 68, 68, 0.25);
+      border-color: var(--accent-crimson);
+      color: #fca5a5;
+    }
+
+    .ctrl-btn.end-call {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      border-color: #ef4444;
+      color: #fff;
+    }
+
+    .ctrl-btn.end-call:hover {
+      background: #b91c1c;
+      transform: scale(1.08);
+    }
+
+    /* Toast Notification */
+    .toast-box {
+      position: fixed;
+      top: 65px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(6, 182, 212, 0.95);
+      color: #032029;
+      font-weight: 700;
+      font-size: 0.8rem;
+      padding: 8px 18px;
+      border-radius: 999px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+      z-index: 100;
+      display: none;
+      animation: popoverFadeIn 0.2s ease-out;
+    }
+
+    @keyframes popoverFadeIn {
+      from { opacity: 0; transform: translate(-50%, -6px); }
+      to { opacity: 1; transform: translate(-50%, 0); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Video Header -->
+  <header class="video-header">
+    <div class="brand-wrap">
+      <div class="brand-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+      </div>
+      <div class="brand-title">AEGIS VIDEO</div>
+    </div>
+    <div id="roomBadge" class="room-badge" style="display: none;">Room: <span id="roomBadgeText"></span></div>
+  </header>
+
+  <!-- Setup Screen -->
+  <main id="setupScreen" class="setup-screen">
+    <div class="setup-card">
+      <div class="brand-icon" style="margin: 0 auto 14px auto; width: 48px; height: 48px;">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+      </div>
+      <h2>Join Video Call</h2>
+      <p>Direct WebRTC Peer-to-Peer &bull; Zero Server Video Storage</p>
+
+      <form id="videoJoinForm">
+        <div class="form-group">
+          <label class="form-label" for="videoRoomInput">Channel / Room</label>
+          <input type="text" id="videoRoomInput" class="input-field" placeholder="e.g. shadow-779" required autocomplete="off">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="videoCodenameInput">Your Codename</label>
+          <input type="text" id="videoCodenameInput" class="input-field" placeholder="e.g. Agent-X" required autocomplete="off">
+        </div>
+
+        <button type="submit" class="join-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+          Start Video Call
+        </button>
+      </form>
+    </div>
+  </main>
+
+  <!-- Active Call Stage -->
+  <main id="callStage" class="call-stage">
+    <!-- Remote Video -->
+    <div class="remote-video-wrap">
+      <video id="remoteVideo" class="remote-video" autoplay playsinline></video>
+      <div id="waitingState" class="waiting-placeholder">
+        <div class="waiting-pulse">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+        <span>Waiting for other peer to join channel...</span>
+      </div>
+    </div>
+
+    <!-- Local Self-View (Picture-in-Picture) -->
+    <div id="localPipWrap" class="local-pip-wrap">
+      <video id="localVideo" class="local-video" autoplay playsinline muted></video>
+    </div>
+
+    <!-- Call Controls Bar -->
+    <div class="call-controls-bar">
+      <!-- Mute Mic -->
+      <button type="button" id="btnToggleAudio" class="ctrl-btn" title="Mute / Unmute Mic" aria-label="Toggle Microphone">
+        <svg id="iconAudioOn" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        <svg id="iconAudioOff" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+      </button>
+
+      <!-- Toggle Video Camera -->
+      <button type="button" id="btnToggleVideo" class="ctrl-btn" title="Turn Camera On / Off" aria-label="Toggle Video">
+        <svg id="iconVideoOn" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+        <svg id="iconVideoOff" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;"><line x1="1" y1="1" x2="23" y2="23"/><path d="M21 15.5l-5-3.5 5-3.5v7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+      </button>
+
+      <!-- Switch Camera (Front / Back for Phones) -->
+      <button type="button" id="btnFlipCamera" class="ctrl-btn" title="Flip Camera" aria-label="Flip Camera">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0-4.42-3.58-8-8-8s-8 3.58-8 8"/><path d="M4 10l-3-3 3-3"/><path d="M4 14c0 4.42 3.58 8 8 8s8-3.58 8-8"/><path d="M20 14l3 3-3 3"/></svg>
+      </button>
+
+      <!-- End Call Button -->
+      <button type="button" id="btnEndCall" class="ctrl-btn end-call" title="End Call" aria-label="End Call">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 11.36 11.36 0 0 0 3.53.56 2 2 0 0 1 2 2v3.08a2 2 0 0 1-2 2A19.86 19.86 0 0 1 3 4a2 2 0 0 1 2-2h3.08a2 2 0 0 1 2 2 11.36 11.36 0 0 0 .56 3.53 2 2 0 0 1-.45 2.11l-1.27 1.27z"/><line x1="23" y1="1" x2="1" y2="23"/></svg>
+      </button>
+    </div>
+  </main>
+
+  <div id="toastBox" class="toast-box"></div>
+
+  <script>
+    (() => {
+      const setupScreen = document.getElementById('setupScreen');
+      const callStage = document.getElementById('callStage');
+      const videoJoinForm = document.getElementById('videoJoinForm');
+      const videoRoomInput = document.getElementById('videoRoomInput');
+      const videoCodenameInput = document.getElementById('videoCodenameInput');
+      const roomBadge = document.getElementById('roomBadge');
+      const roomBadgeText = document.getElementById('roomBadgeText');
+
+      const localVideo = document.getElementById('localVideo');
+      const remoteVideo = document.getElementById('remoteVideo');
+      const waitingState = document.getElementById('waitingState');
+
+      const btnToggleAudio = document.getElementById('btnToggleAudio');
+      const iconAudioOn = document.getElementById('iconAudioOn');
+      const iconAudioOff = document.getElementById('iconAudioOff');
+
+      const btnToggleVideo = document.getElementById('btnToggleVideo');
+      const iconVideoOn = document.getElementById('iconVideoOn');
+      const iconVideoOff = document.getElementById('iconVideoOff');
+
+      const btnFlipCamera = document.getElementById('btnFlipCamera');
+      const btnEndCall = document.getElementById('btnEndCall');
+      const toastBox = document.getElementById('toastBox');
+
+      let ws = null;
+      let peerConnection = null;
+      let localStream = null;
+      let currentRoom = '';
+      let codename = '';
+      let isAudioMuted = false;
+      let isVideoOff = false;
+      let facingMode = 'user'; // 'user' (front) or 'environment' (back)
+
+      const RTC_CONFIG = {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' }
+        ]
+      };
+
+      const showToast = (msg) => {
+        toastBox.textContent = msg;
+        toastBox.style.display = 'block';
+        setTimeout(() => { toastBox.style.display = 'none'; }, 2400);
+      };
+
+      // Read Hash params if linked from chat
+      const hash = window.location.hash.substring(1);
+      if (hash) {
+        const p = new URLSearchParams(hash);
+        if (p.get('room')) videoRoomInput.value = p.get('room');
+        if (p.get('codename')) videoCodenameInput.value = p.get('codename');
+      }
+
+      if (!videoCodenameInput.value) {
+        videoCodenameInput.value = 'Agent-' + Math.floor(100 + Math.random() * 900);
+      }
+
+      // Initialize Local Camera & Microphone
+      const startMedia = async () => {
+        try {
+          if (localStream) {
+            localStream.getTracks().forEach(t => t.stop());
+          }
+          localStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: {
+              facingMode: facingMode,
+              width: { ideal: 1280 },
+              height: { ideal: 720 }
+            }
+          });
+          localVideo.srcObject = localStream;
+          return true;
+        } catch (err) {
+          console.error('Media stream error:', err);
+          alert('Camera / Microphone permission denied or unavailable: ' + err.message);
+          return false;
+        }
+      };
+
+      // Setup WebRTC PeerConnection
+      const createPeerConnection = () => {
+        peerConnection = new RTCPeerConnection(RTC_CONFIG);
+
+        // Add local tracks
+        if (localStream) {
+          localStream.getTracks().forEach(track => {
+            peerConnection.addTrack(track, localStream);
+          });
+        }
+
+        // When remote track arrives
+        peerConnection.ontrack = (event) => {
+          if (event.streams && event.streams[0]) {
+            remoteVideo.srcObject = event.streams[0];
+            waitingState.style.display = 'none';
+          }
+        };
+
+        // ICE candidate generation
+        peerConnection.onicecandidate = (event) => {
+          if (event.candidate && ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+              type: 'webrtc_signal',
+              roomId: currentRoom,
+              signal: { candidate: event.candidate }
+            }));
+          }
+        };
+
+        peerConnection.onconnectionstatechange = () => {
+          if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed') {
+            waitingState.style.display = 'flex';
+          }
+        };
+      };
+
+      // Connect Signaling WebSocket
+      const connectSignaling = () => {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        ws = new WebSocket(`${protocol}//${window.location.host}`);
+
+        ws.onopen = () => {
+          ws.send(JSON.stringify({
+            type: 'join',
+            roomId: currentRoom,
+            peerId: codename
+          }));
+        };
+
+        ws.onmessage = async (evt) => {
+          try {
+            const msg = JSON.parse(evt.data);
+
+            if (msg.type === 'presence') {
+              // When another peer joins, initiate offer
+              if (msg.event === 'join' && msg.peerId !== codename) {
+                showToast(`👤 ${msg.peerId} joined call`);
+                createAndSendOffer();
+              }
+              if (msg.event === 'leave') {
+                showToast(`👤 A peer left the call`);
+                waitingState.style.display = 'flex';
+              }
+            }
+
+            if (msg.type === 'webrtc_signal' && msg.signal) {
+              const signal = msg.signal;
+
+              if (signal.offer) {
+                if (!peerConnection) createPeerConnection();
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(signal.offer));
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                ws.send(JSON.stringify({
+                  type: 'webrtc_signal',
+                  roomId: currentRoom,
+                  signal: { answer: answer }
+                }));
+              } else if (signal.answer) {
+                if (peerConnection) {
+                  await peerConnection.setRemoteDescription(new RTCSessionDescription(signal.answer));
+                }
+              } else if (signal.candidate) {
+                if (peerConnection) {
+                  try {
+                    await peerConnection.addIceCandidate(new RTCIceCandidate(signal.candidate));
+                  } catch (e) {}
+                }
+              }
+            }
+          } catch (e) {
+            console.error('Signaling parse error:', e);
+          }
+        };
+      };
+
+      const createAndSendOffer = async () => {
+        if (!peerConnection) createPeerConnection();
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'webrtc_signal',
+            roomId: currentRoom,
+            signal: { offer: offer }
+          }));
+        }
+      };
+
+      // Join Form Submit
+      videoJoinForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        currentRoom = videoRoomInput.value.trim();
+        codename = videoCodenameInput.value.trim();
+
+        if (!currentRoom || !codename) return;
+
+        const mediaOk = await startMedia();
+        if (!mediaOk) return;
+
+        createPeerConnection();
+        connectSignaling();
+
+        setupScreen.style.display = 'none';
+        callStage.style.display = 'flex';
+        roomBadgeText.textContent = currentRoom;
+        roomBadge.style.display = 'block';
+
+        showToast('📞 Video channel ready');
+      });
+
+      // Controls: Mute Audio
+      btnToggleAudio.addEventListener('click', () => {
+        if (!localStream) return;
+        isAudioMuted = !isAudioMuted;
+        localStream.getAudioTracks().forEach(t => t.enabled = !isAudioMuted);
+        btnToggleAudio.classList.toggle('off', isAudioMuted);
+        iconAudioOn.style.display = isAudioMuted ? 'none' : 'block';
+        iconAudioOff.style.display = isAudioMuted ? 'block' : 'none';
+        showToast(isAudioMuted ? 'Microphone Muted' : 'Microphone Active');
+      });
+
+      // Controls: Toggle Video
+      btnToggleVideo.addEventListener('click', () => {
+        if (!localStream) return;
+        isVideoOff = !isVideoOff;
+        localStream.getVideoTracks().forEach(t => t.enabled = !isVideoOff);
+        btnToggleVideo.classList.toggle('off', isVideoOff);
+        iconVideoOn.style.display = isVideoOff ? 'none' : 'block';
+        iconVideoOff.style.display = isVideoOff ? 'block' : 'none';
+        showToast(isVideoOff ? 'Camera Off' : 'Camera On');
+      });
+
+      // Controls: Flip Camera
+      btnFlipCamera.addEventListener('click', async () => {
+        facingMode = facingMode === 'user' ? 'environment' : 'user';
+        const ok = await startMedia();
+        if (ok && peerConnection) {
+          const videoTrack = localStream.getVideoTracks()[0];
+          const sender = peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
+          if (sender && videoTrack) {
+            sender.replaceTrack(videoTrack);
+          }
+        }
+        showToast('Flipped Camera');
+      });
+
+      // Controls: End Call
+      const endCall = () => {
+        if (localStream) {
+          localStream.getTracks().forEach(t => t.stop());
+          localStream = null;
+        }
+        if (peerConnection) {
+          peerConnection.close();
+          peerConnection = null;
+        }
+        if (ws) {
+          ws.close();
+          ws = null;
+        }
+        localVideo.srcObject = null;
+        remoteVideo.srcObject = null;
+        callStage.style.display = 'none';
+        roomBadge.style.display = 'none';
+        setupScreen.style.display = 'flex';
+        waitingState.style.display = 'flex';
+        showToast('Call ended');
+      };
+
+      btnEndCall.addEventListener('click', endCall);
+    })();
+  </script>
+</body>
+</html>

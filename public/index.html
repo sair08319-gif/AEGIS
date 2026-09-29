@@ -24,7 +24,8 @@
   <div class="app-container">
     <!-- Top Secure Header -->
     <header class="site-header">
-      <div class="brand-wrapper">
+      <!-- Lobby Brand (Visible in Lobby) -->
+      <div id="headerBrand" class="brand-wrapper">
         <div class="brand-icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
@@ -33,54 +34,34 @@
         <div class="brand-title">AEGIS</div>
       </div>
 
-      <!-- Center Minimalist Symbol Dock (Visible in Chat) -->
-      <div id="headerSymbolDock" class="symbol-dock" style="display: none;">
-        <!-- Shield Icon -->
-        <button type="button" class="dock-btn" id="shieldIndicator" data-symbol="shield" data-tooltip="Anti-Snoop Shield: Active" aria-label="Anti-Snoop Shield">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          <span class="dock-dot ok" id="shieldDot"></span>
-          <span id="shieldLabel" style="display: none;">SHIELD: ARMED</span>
+      <!-- Chat Active Bar: Back Button, Room Name & Peer Count (Visible in Chat) -->
+      <div id="chatHeaderInfo" class="chat-header-info" style="display: none;">
+        <button type="button" id="btnLeaveRoom" class="header-back-btn" data-symbol="exit" data-tooltip="Leave Channel" aria-label="Leave Channel">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>
+          </svg>
         </button>
-
-        <!-- Lock / E2EE Icon -->
-        <button type="button" class="dock-btn" id="cryptoIndicator" data-symbol="crypto" data-tooltip="E2EE: AES-256 + 2KB Padding" aria-label="Encryption Status">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          <span class="status-dot" id="statusDot"></span>
-          <span id="cryptoStatusLabel" style="display: none;">AES-256 READY</span>
-        </button>
-
-        <!-- Room / Channel Frequency Icon -->
-        <button type="button" class="dock-btn" id="roomDockBtn" data-symbol="room" data-tooltip="Channel Frequency" aria-label="Active Channel">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.2 19.1 19.1"/></svg>
-          <span id="activeRoomLabel" style="display: none;">room</span>
-        </button>
-
-        <!-- Connected Peers Icon -->
-        <button type="button" class="dock-btn" id="peerDockBtn" data-symbol="peers" data-tooltip="Active Peers" aria-label="Connected Peers">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          <span id="peerCountLabel" class="dock-counter">1</span>
-        </button>
-
-        <!-- Chaff Traffic Pulse -->
-        <button type="button" class="dock-btn" id="chaffStatusBadge" data-symbol="chaff" data-tooltip="Chaff Noise Traffic" aria-label="Chaff Traffic">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-          <span class="dock-dot pulse-cyan"></span>
-        </button>
-
-        <!-- Safety Fingerprint Emojis -->
-        <button type="button" class="dock-btn fingerprint-btn" id="safetyFingerprintBadge" data-symbol="fingerprint" data-tooltip="Safety Fingerprint (SAS)" aria-label="Safety Fingerprint">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><path d="M12 2a10 10 0 0 0-10 10c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.1-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z"/></svg>
-          <span id="safetyFingerprintCode" class="fp-mini-text">••••</span>
-        </button>
+        <div class="chat-title-group">
+          <span id="activeRoomLabel" class="chat-room-title">room</span>
+          <button type="button" id="btnActivePeers" class="chat-peer-btn" data-tooltip="Click to view codenames in room" aria-label="Active Peers">
+            <span class="status-indicator-dot"></span>
+            <span id="peerCountLabel">1</span> online
+          </button>
+        </div>
       </div>
 
       <!-- Right Action Tools -->
       <div class="header-status-group">
         <!-- Chat Action Icons (Visible in Chat) -->
         <div id="chatActionGroup" class="symbol-dock actions-dock" style="display: none;">
+          <!-- Video Call Sub-service Button -->
+          <button type="button" id="btnOpenVideo" class="dock-btn" data-tooltip="Open Video Call (/video)" aria-label="Video Call">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+          </button>
+
           <!-- Burn Timer Icon & Interactive Popover Trigger -->
           <button type="button" class="dock-btn" id="btnBurnTimerDock" data-symbol="burn" data-tooltip="Auto-Burn: 15s" aria-label="Auto-Burn Timer">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
             <span id="burnTimerBadge" class="dock-badge-text">15s</span>
             <!-- Hidden native select for backend compatibility -->
             <select id="burnTimerSelect" style="display: none;">
@@ -92,19 +73,9 @@
             </select>
           </button>
 
-          <!-- Ciphertext Toggle Icon -->
-          <button type="button" id="btnToggleRawCipher" class="dock-btn" data-symbol="cipher" data-tooltip="Inspect Raw Ciphertext" aria-label="Inspect Raw Ciphertext">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-          </button>
-
           <!-- Copy Invite Link Icon -->
           <button type="button" id="btnShareInvite" class="dock-btn" data-symbol="share" data-tooltip="Copy Secret Invite Link" aria-label="Copy Secret Invite Link">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-          </button>
-
-          <!-- Exit Room Icon -->
-          <button type="button" id="btnLeaveRoom" class="dock-btn danger" data-symbol="exit" data-tooltip="Exit Channel & Wipe RAM" aria-label="Exit Channel">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
           </button>
         </div>
 
@@ -184,12 +155,7 @@
     <!-- SCREEN 2: SECURE CHAT INTERFACE -->
     <main id="screenChat" class="screen-chat" style="display: none;">
       <!-- Messages Viewport -->
-      <div id="messagesViewport" class="messages-viewport">
-        <div class="channel-start-pill">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          <span>End-to-End Encrypted &bull; 2KB Envelope Masking &bull; Zero Server Retention</span>
-        </div>
-      </div>
+      <div id="messagesViewport" class="messages-viewport"></div>
 
       <!-- Live Typing Bar -->
       <div id="typingBar" class="typing-bar"></div>
@@ -204,6 +170,18 @@
           </div>
           <button type="button" id="btnCancelImage" class="preview-cancel-btn" title="Remove Photo">✕</button>
         </div>
+      </div>
+
+      <!-- Active Reply Preview Bar -->
+      <div id="replyingBanner" class="replying-banner" style="display: none;">
+        <div class="replying-left">
+          <div class="replying-indicator-bar"></div>
+          <div class="replying-text-group">
+            <span class="replying-label">Replying to <strong id="replyAuthor">Agent</strong></span>
+            <span class="replying-snippet" id="replySnippet">Message preview</span>
+          </div>
+        </div>
+        <button type="button" id="btnCancelReply" class="reply-cancel-btn" title="Cancel Reply">✕</button>
       </div>
 
       <!-- Chat Input Area -->
@@ -252,6 +230,23 @@
 
   <!-- Floating Toast Notification -->
   <div id="stealthToast" class="stealth-toast" style="display: none;"></div>
+
+  <!-- Active Peers List Modal -->
+  <div id="peersModal" class="peers-modal" style="display: none;">
+    <div class="peers-backdrop" id="peersBackdrop"></div>
+    <div class="peers-dialog">
+      <div class="peers-dialog-header">
+        <div class="peers-header-left">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <h4>Channel Members</h4>
+        </div>
+        <button type="button" id="btnClosePeers" class="popover-close-btn" aria-label="Close">✕</button>
+      </div>
+      <div id="peersListContainer" class="peers-list-container">
+        <!-- Injected dynamically -->
+      </div>
+    </div>
+  </div>
 
   <!-- Scripts -->
   <script src="crypto-js.js"></script>

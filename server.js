@@ -61,6 +61,7 @@ const server = http.createServer((req, res) => {
   // Parse path and serve static files
   let safePath = req.url.split('?')[0];
   if (safePath === '/' || safePath === '') safePath = '/index.html';
+  if (safePath === '/video' || safePath === '/video/') safePath = '/video/index.html';
   if (safePath.startsWith('/') || safePath.startsWith('\\')) safePath = safePath.slice(1);
   const filePath = path.join(PUBLIC_DIR, safePath);
 
@@ -137,7 +138,8 @@ wss.on('connection', (ws, req) => {
           type: 'presence',
           event: 'leave',
           peerId,
-          peerCount: set.size
+          peerCount: set.size,
+          peers: getRoomPeers(currentRoom)
         });
       }
       currentRoom = null;
@@ -177,19 +179,21 @@ wss.on('connection', (ws, req) => {
           peerId = (typeof data.peerId === 'string' && data.peerId.trim()) 
             ? data.peerId.trim().substring(0, 32) 
             : 'anon-' + Math.random().toString(36).substring(2, 7);
+          ws.peerId = peerId;
 
           if (!rooms.has(currentRoom)) {
             rooms.set(currentRoom, new Set());
           }
           rooms.get(currentRoom).add(ws);
 
-          // Broadcast peer count to room
+          // Broadcast peer count & active peer codenames to room
           const count = rooms.get(currentRoom).size;
           broadcastToRoom(currentRoom, {
             type: 'presence',
             event: 'join',
             peerId,
-            peerCount: count
+            peerCount: count,
+            peers: getRoomPeers(currentRoom)
           });
           break;
         }
@@ -203,6 +207,17 @@ wss.on('connection', (ws, req) => {
             type: 'encrypted_message',
             payload: data.payload,
             timestamp: Date.now()
+          }, ws); // Skip sender
+          break;
+        }
+
+        case 'webrtc_signal': {
+          if (!currentRoom || !rooms.has(currentRoom)) return;
+          // Relay WebRTC P2P signals (offer, answer, candidate) to other peers
+          broadcastToRoom(currentRoom, {
+            type: 'webrtc_signal',
+            signal: data.signal,
+            sender: peerId
           }, ws); // Skip sender
           break;
         }
@@ -240,6 +255,16 @@ wss.on('connection', (ws, req) => {
   ws.on('close', cleanup);
   ws.on('error', cleanup);
 });
+
+function getRoomPeers(roomId) {
+  const set = rooms.get(roomId);
+  if (!set) return [];
+  const peers = [];
+  for (const client of set) {
+    if (client.peerId) peers.push(client.peerId);
+  }
+  return peers;
+}
 
 function broadcastToRoom(roomId, messageObj, excludeWs = null) {
   const room = rooms.get(roomId);

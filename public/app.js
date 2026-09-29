@@ -18,17 +18,34 @@
   const btnGenKey = document.getElementById('btnGenKey');
   const btnTogglePass = document.getElementById('btnTogglePass');
 
+  const headerBrand = document.getElementById('headerBrand');
+  const chatHeaderInfo = document.getElementById('chatHeaderInfo');
   const activeRoomLabel = document.getElementById('activeRoomLabel');
   const peerCountLabel = document.getElementById('peerCountLabel');
   const cryptoStatusLabel = document.getElementById('cryptoStatusLabel');
   const statusDot = document.getElementById('statusDot');
   const burnTimerSelect = document.getElementById('burnTimerSelect');
-  const btnToggleRawCipher = document.getElementById('btnToggleRawCipher');
   const btnShareInvite = document.getElementById('btnShareInvite');
   const btnLeaveRoom = document.getElementById('btnLeaveRoom');
   const panicBtn = document.getElementById('panicBtn');
 
-  // Header Symbol Dock & Minimalist Controls
+  // Active Peers Modal Elements
+  const btnActivePeers = document.getElementById('btnActivePeers');
+  const peersModal = document.getElementById('peersModal');
+  const peersBackdrop = document.getElementById('peersBackdrop');
+  const btnClosePeers = document.getElementById('btnClosePeers');
+  const peersListContainer = document.getElementById('peersListContainer');
+
+  // Video Call Button
+  const btnOpenVideo = document.getElementById('btnOpenVideo');
+
+  // Replying Elements
+  const replyingBanner = document.getElementById('replyingBanner');
+  const replyAuthor = document.getElementById('replyAuthor');
+  const replySnippet = document.getElementById('replySnippet');
+  const btnCancelReply = document.getElementById('btnCancelReply');
+
+  // Header Symbol Dock & Controls
   const headerSymbolDock = document.getElementById('headerSymbolDock');
   const chatActionGroup = document.getElementById('chatActionGroup');
   const btnBurnTimerDock = document.getElementById('btnBurnTimerDock');
@@ -84,7 +101,8 @@
   let ws = null;
   let currentRoom = '';
   let codename = '';
-  let showCiphertext = false;
+  let activePeersList = [];
+  let currentReply = null;
   let typingTimeout = null;
   let lastTypingSent = 0;
   let panicPressTimes = [];
@@ -587,16 +605,6 @@
         return;
       }
 
-      if (symbol === 'cipher') {
-        showCiphertext = !showCiphertext;
-        btnToggleRawCipher.classList.toggle('active', showCiphertext);
-        document.querySelectorAll('.raw-cipher-preview').forEach(el => {
-          el.style.display = showCiphertext ? 'block' : 'none';
-        });
-        showToast(showCiphertext ? '🔒 Raw ciphertext preview enabled' : '🔒 Raw ciphertext hidden');
-        return;
-      }
-
       if (symbol === 'panic' || symbol === 'wipe') {
         triggerWipe(false);
         return;
@@ -631,6 +639,69 @@
     });
   });
 
+  // Active Peers List Trigger
+  if (btnActivePeers) {
+    btnActivePeers.addEventListener('click', () => {
+      if (!peersModal || !peersListContainer) return;
+      peersListContainer.innerHTML = '';
+
+      const listToShow = (activePeersList && activePeersList.length > 0)
+        ? activePeersList
+        : [codename];
+
+      listToShow.forEach(name => {
+        const item = document.createElement('div');
+        item.className = 'peer-item-card';
+        const isYou = (name === codename);
+        item.innerHTML = `
+          <div class="peer-name-wrap">
+            <span style="font-size: 1.1rem;">👤</span>
+            <span style="font-weight: 600;">${escapeHtml(name)}</span>
+          </div>
+          ${isYou ? '<span class="peer-badge-you">YOU</span>' : '<span style="color: #34d399; font-size: 0.72rem; font-weight: 600;">● Online</span>'}
+        `;
+        peersListContainer.appendChild(item);
+      });
+
+      peersModal.style.display = 'flex';
+    });
+  }
+
+  const closePeersModal = () => {
+    if (peersModal) peersModal.style.display = 'none';
+  };
+  if (btnClosePeers) btnClosePeers.addEventListener('click', closePeersModal);
+  if (peersBackdrop) peersBackdrop.addEventListener('click', closePeersModal);
+
+  // Video Call Launch Trigger (/video)
+  if (btnOpenVideo) {
+    btnOpenVideo.addEventListener('click', () => {
+      const roomParam = encodeURIComponent(currentRoom || '');
+      const codeParam = encodeURIComponent(codename || '');
+      const keyParam = encodeURIComponent(passphraseInput.value || '');
+      const videoUrl = `/video#room=${roomParam}&codename=${codeParam}&key=${keyParam}`;
+      window.open(videoUrl, '_blank');
+    });
+  }
+
+  // Reply Helpers
+  const startReplyingTo = ({ sender, text }) => {
+    currentReply = { sender, text };
+    if (replyAuthor) replyAuthor.textContent = sender;
+    if (replySnippet) replySnippet.textContent = text || 'Photo';
+    if (replyingBanner) replyingBanner.style.display = 'flex';
+    if (messageInput) messageInput.focus();
+  };
+
+  const cancelReply = () => {
+    currentReply = null;
+    if (replyingBanner) replyingBanner.style.display = 'none';
+  };
+
+  if (btnCancelReply) {
+    btnCancelReply.addEventListener('click', cancelReply);
+  }
+
   // Form Submit: Initialize Crypto & Connect
   joinForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -651,23 +722,16 @@
 
       connectRelay(currentRoom);
 
-      activeRoomLabel.textContent = currentRoom;
-      if (roomDockBtn) roomDockBtn.dataset.tooltip = `Channel: ${currentRoom}`;
+      if (activeRoomLabel) activeRoomLabel.textContent = currentRoom;
 
       screenLobby.style.display = 'none';
       screenChat.style.display = 'flex';
 
-      // Reveal Minimalist Symbol Docks
-      if (headerSymbolDock) headerSymbolDock.style.display = 'inline-flex';
+      // Switch Header: Hide Lobby Brand, Show Chat Info & Action Controls
+      if (headerBrand) headerBrand.style.display = 'none';
+      if (chatHeaderInfo) chatHeaderInfo.style.display = 'flex';
       if (chatActionGroup) chatActionGroup.style.display = 'inline-flex';
-
-      if (cryptoStatusLabel) cryptoStatusLabel.textContent = 'E2EE ACTIVE + 2KB PADDING';
-      if (statusDot) statusDot.style.background = 'var(--accent-emerald)';
-
-      // Calculate and display Anti-Phishing Safety Fingerprint (SAS)
-      if (safetyFingerprintCode) {
-        safetyFingerprintCode.textContent = calculateSafetyFingerprint(passphrase, currentRoom);
-      }
+      if (headerSymbolDock) headerSymbolDock.style.display = 'none';
 
       // Start Chaff (Dummy Traffic) Generator
       startChaffGenerator();
@@ -775,7 +839,9 @@
           case 'presence': {
             if (msg.peerCount !== undefined) {
               if (peerCountLabel) peerCountLabel.textContent = msg.peerCount;
-              if (peerDockBtn) peerDockBtn.dataset.tooltip = `Active Peers: ${msg.peerCount}`;
+            }
+            if (Array.isArray(msg.peers)) {
+              activePeersList = msg.peers;
             }
             break;
           }
@@ -855,6 +921,7 @@
         sender: data.sender,
         text: data.text || '',
         image: data.image || null,
+        replyTo: data.replyTo || null,
         timestamp: data.timestamp,
         isOutgoing: false,
         rawCiphertext: payload.ciphertext,
@@ -886,14 +953,17 @@
     if (imageFileInput) imageFileInput.value = '';
 
     const burnSeconds = parseInt(burnTimerSelect.value, 10) || 0;
+    const replyToSend = currentReply ? { sender: currentReply.sender, text: currentReply.text } : null;
+    cancelReply();
 
-    // SECURITY: burnSeconds is packed INSIDE the encrypted payload so it is HMAC-authenticated
+    // SECURITY: burnSeconds & replyTo are packed INSIDE the encrypted payload so they are HMAC-authenticated
     // and cannot be read or tampered with on the network.
     const messageData = {
       isDummy: false,
       sender: codename,
       text: text,
       image: imageToSend || null,
+      replyTo: replyToSend,
       burnSeconds: burnSeconds,
       timestamp: Date.now()
     };
@@ -926,6 +996,7 @@
       sender: codename,
       text: text,
       image: imageToSend || null,
+      replyTo: replyToSend,
       timestamp: messageData.timestamp,
       isOutgoing: true,
       rawCiphertext: encrypted.ciphertext,
@@ -934,7 +1005,7 @@
   });
 
   // Render Message Bubble with Complete Auto-Burn RAM Purge
-  const renderMessage = ({ sender, text = '', image = null, timestamp, isOutgoing, isError = false, rawCiphertext = '', burnSeconds = 0 }) => {
+  const renderMessage = ({ sender, text = '', image = null, replyTo = null, timestamp, isOutgoing, isError = false, rawCiphertext = '', burnSeconds = 0 }) => {
     const row = document.createElement('div');
     row.className = `msg-row ${isOutgoing ? 'outgoing' : 'incoming'}`;
 
@@ -949,21 +1020,19 @@
       </div>
     `;
 
+    let replyHtml = '';
+    if (replyTo && replyTo.sender) {
+      replyHtml = `
+        <div class="msg-reply-quote">
+          <span class="quote-author">${escapeHtml(replyTo.sender)}</span>
+          <span class="quote-snippet">${escapeHtml(replyTo.text || '')}</span>
+        </div>
+      `;
+    }
+
     let textHtml = '';
     if (text) {
       textHtml = `<div class="msg-text">${escapeHtml(text)}</div>`;
-    }
-
-    let cipherHtml = '';
-    if (rawCiphertext) {
-      const sanitizedSnippet = escapeHtml(String(rawCiphertext).substring(0, 100));
-      const safeLength = Number(rawCiphertext.length) || 0;
-      cipherHtml = `
-        <div class="raw-cipher-preview" style="display: ${showCiphertext ? 'block' : 'none'};">
-          <div class="cipher-badge">🔒 AES-256 CIPHERTEXT:</div>
-          <div class="cipher-blob">${sanitizedSnippet}... [${safeLength} bytes]</div>
-        </div>
-      `;
     }
 
     let burnBarHtml = '';
@@ -977,13 +1046,29 @@
 
     row.innerHTML = `
       ${metaHtml}
-      <div class="msg-bubble ${isError ? 'decrypt-error' : ''}">
-        <div class="msg-image-slot"></div>
-        ${textHtml}
-        ${burnBarHtml}
+      <div class="msg-bubble-wrap">
+        <div class="msg-bubble ${isError ? 'decrypt-error' : ''}">
+          ${replyHtml}
+          <div class="msg-image-slot"></div>
+          ${textHtml}
+          ${burnBarHtml}
+        </div>
+        <button type="button" class="msg-reply-btn" title="Reply to message" aria-label="Reply">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+        </button>
       </div>
-      ${cipherHtml}
     `;
+
+    const replyBtn = row.querySelector('.msg-reply-btn');
+    if (replyBtn) {
+      replyBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        startReplyingTo({
+          sender: sender,
+          text: text || (image ? 'Photo' : 'Encrypted message')
+        });
+      });
+    }
 
     // Secure Image DOM Injection: Validate data:image protocol to prevent HTML injection
     if (image && typeof image === 'string' && image.startsWith('data:image/')) {
@@ -1094,7 +1179,9 @@
     if (imageFileInput) imageFileInput.value = '';
 
     if (headerSymbolDock) headerSymbolDock.style.display = 'none';
+    if (chatHeaderInfo) chatHeaderInfo.style.display = 'none';
     if (chatActionGroup) chatActionGroup.style.display = 'none';
+    if (headerBrand) headerBrand.style.display = 'flex';
 
     // Strip hash and secrets from browser URL bar history
     try {
@@ -1127,18 +1214,12 @@
     }
     window.stealthCrypto.destroy();
     seenPacketIds.clear();
-    messagesViewport.innerHTML = `
-      <div class="channel-start-pill">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        <span>Channel Closed &bull; Memory Cleared</span>
-      </div>
-    `;
+    messagesViewport.innerHTML = '';
     screenChat.style.display = 'none';
-    if (headerSymbolDock) headerSymbolDock.style.display = 'none';
+    if (chatHeaderInfo) chatHeaderInfo.style.display = 'none';
     if (chatActionGroup) chatActionGroup.style.display = 'none';
+    if (headerBrand) headerBrand.style.display = 'flex';
     screenLobby.style.display = 'flex';
-    if (cryptoStatusLabel) cryptoStatusLabel.textContent = 'AES-256 READY';
-    if (statusDot) statusDot.style.background = 'var(--accent-emerald)';
   });
 
   // Hotkey Navigation & Safe Panic Trigger
@@ -1152,9 +1233,21 @@
         return;
       }
 
-      // 2. If Symbol Popover is open, ESC closes popover WITHOUT triggering panic wipe
+      // 2. If Symbol Popover or Peers Modal is open, ESC closes it WITHOUT triggering panic wipe
+      if (peersModal && peersModal.style.display === 'flex') {
+        closePeersModal();
+        panicPressTimes = [];
+        return;
+      }
+
       if (symbolPopoverCard && symbolPopoverCard.style.display === 'flex') {
         closePopover();
+        panicPressTimes = [];
+        return;
+      }
+
+      if (currentReply) {
+        cancelReply();
         panicPressTimes = [];
         return;
       }
