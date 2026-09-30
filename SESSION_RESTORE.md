@@ -1,14 +1,14 @@
-# 🛡️ Aegis Stealth Chat — Project Checkpoint & Session Restore
+﻿# 🛡️ Aegis Stealth Chat — Project Checkpoint & Session Restore
 
-**Project Location:** `C:\Users\muthy\.gemini\antigravity-ide\scratch\secure-stealth-chat`
+**Project Location:** `Z:\secure-stealth-chat`
 
 ---
 
-## 🚀 How to Start the Server After Reboot
+## 🚀 How to Start the Server
 
 Open a terminal or command prompt and run:
 ```powershell
-cd C:\Users\muthy\.gemini\antigravity-ide\scratch\secure-stealth-chat
+cd Z:\secure-stealth-chat
 node server.js
 ```
 *(Or double-click `start.bat` in this folder).*
@@ -18,13 +18,14 @@ node server.js
 ## 🌐 URLs to Open
 
 * **PC Browser:** `http://localhost:3000`
-* **Mobile Phone (Wi-Fi / Hotspot):** `http://192.168.29.225:3000` *(or check IP printed in terminal)*
+* **Mobile Phone (Wi-Fi / Hotspot):** `http://<YOUR_LAN_IP>:3000` *(check IP printed in terminal)*
+* **WebRTC Video / Audio Room:** `http://localhost:3000/video`
 
 ---
 
 ## 💬 How to Continue in IDE Chat
 
-If you open a new chat window after reboot, send this prompt:
-> **"Resume stealth chat at C:\Users\muthy\.gemini\antigravity-ide\scratch\secure-stealth-chat"**
+If you open a new chat window, send this prompt:
+> **"Resume stealth chat at Z:\secure-stealth-chat"**
 
-All files, security hardenings (AES-256, 2KB padding, dummy traffic, image attachments, auto-burn, panic wipe), and setup are completely saved and ready.
+All files, security hardenings (AES-256-CBC, PBKDF2 30k rounds, HMAC-SHA256, 2KB padding, dummy traffic, image attachments, auto-burn, WebRTC video calling, panic wipe), and setup are completely saved and ready.
