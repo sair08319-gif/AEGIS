@@ -1,15 +1,17 @@
-/**
- * ZERO-KNOWLEDGE CLIENT-SIDE CRYPTOGRAPHIC ENGINE
+﻿/**
+ * ZERO-KNOWLEDGE CLIENT-SIDE CRYPTOGRAPHIC ENGINE (HARDENED v3)
  * Implements:
- * 1. AES-256 + PBKDF2 (10,000 rounds)
- * 2. HMAC-SHA256 Authenticated Encryption
+ * 1. Cryptographic Key Separation (512-bit PBKDF2 split into distinct EncKey & MacKey)
+ * 2. AES-256-CBC Encryption + HMAC-SHA256 Authenticated Encryption-then-MAC
  * 3. Fixed-Size 2048-Byte Padding (Blinds packet size from traffic analysis)
  * 4. Chaff / Dummy Traffic generation (Blinds transmission timing)
+ * 5. Constant-time MAC comparison (Defeats timing attacks)
  */
 
 class StealthCrypto {
   constructor() {
-    this.activeKey = null;
+    this.activeEncKey = null; // 256-bit AES-CBC Key
+    this.activeMacKey = null; // 256-bit HMAC-SHA256 Key
     this.rawPassphrase = null;
     this.saltHex = null;
     this.TARGET_PADDING_SIZE = 2048; // Constant size for ALL messages
@@ -52,52 +54,61 @@ class StealthCrypto {
   }
 
   /**
-   * Derive 256-bit AES key from user passphrase using PBKDF2.
-   * Derives a deterministic 128-bit salt from the roomId so that all peers
-   * in the same room derive the exact same AES-256 key without transmitting salts!
+   * Derive 512 bits using PBKDF2 (30,000 rounds)
+   * Enforces Cryptographic Key Separation:
+   * - First 256 bits = AES-256 Encryption Key
+   * - Second 256 bits = HMAC-SHA256 Authentication Key
    */
   async initializeKey(passphrase, roomId) {
     this.rawPassphrase = passphrase;
 
-    // Deterministic room salt: SHA-256(roomId) truncated to 128-bit hex
-    const saltHash = CryptoJS.SHA256('aegis-salt-v2:' + (roomId || 'default'));
+    // Domain-separated deterministic room salt
+    const saltHash = CryptoJS.SHA256('aegis-salt-v3:' + (roomId || 'default'));
     this.saltHex = saltHash.toString().substring(0, 32);
 
     const salt = CryptoJS.enc.Hex.parse(this.saltHex);
 
-    this.activeKey = CryptoJS.PBKDF2(passphrase, salt, {
-      keySize: 256 / 32,
+    // Derive 512 bits (16 32-bit words)
+    const derived = CryptoJS.PBKDF2(passphrase, salt, {
+      keySize: 512 / 32,
       iterations: 30000,
       hasher: CryptoJS.algo.SHA256
     });
 
+    // Key Separation: Split derived material into two independent 256-bit keys
+    this.activeEncKey = CryptoJS.lib.WordArray.create(derived.words.slice(0, 8), 32);
+    this.activeMacKey = CryptoJS.lib.WordArray.create(derived.words.slice(8, 16), 32);
+
     return this.saltHex;
+  }
+
+  get isInitialized() {
+    return !!(this.activeEncKey && this.activeMacKey);
   }
 
   /**
    * Encrypt data with Fixed-Size Padding to eliminate packet-size metadata leaks
    */
   async encrypt(dataObj) {
-    if (!this.activeKey) {
+    if (!this.activeEncKey || !this.activeMacKey) {
       throw new Error('Cryptographic key not initialized');
     }
 
     // 1. Pack into canonical payload
     const jsonStr = JSON.stringify(dataObj);
 
-    // 2. Apply Fixed-Size Constant Padding (Total 2048 bytes)
-    // Envelope structure: { p: payload, n: noise }
+    // 2. Apply Fixed-Size Constant Padding (Target 2048 bytes for text)
     const neededPadding = Math.max(0, this.TARGET_PADDING_SIZE - jsonStr.length - 30);
     const paddedEnvelope = JSON.stringify({
       p: dataObj,
       n: StealthCrypto.generateNoise(neededPadding)
     });
 
-    // 3. Encrypt with random 16-byte IV
+    // 3. Encrypt with random 16-byte IV using dedicated Encryption Key
     const iv = CryptoJS.lib.WordArray.random(16);
     const ivHex = iv.toString();
 
-    const encrypted = CryptoJS.AES.encrypt(paddedEnvelope, this.activeKey, {
+    const encrypted = CryptoJS.AES.encrypt(paddedEnvelope, this.activeEncKey, {
       iv: iv,
       mode: CryptoJS.mode.CBC,
       padding: CryptoJS.pad.Pkcs7
@@ -105,15 +116,16 @@ class StealthCrypto {
 
     const ciphertext = encrypted.toString();
 
-    // 4. HMAC-SHA256 Authentication Tag
-    const authTag = CryptoJS.HmacSHA256(ciphertext + ivHex, this.activeKey).toString();
+    // 4. Encrypt-then-MAC: HMAC-SHA256 Authentication Tag using dedicated MAC Key
+    // Include separator to avoid collision/boundary attacks
+    const authTag = CryptoJS.HmacSHA256(ciphertext + ':' + ivHex, this.activeMacKey).toString();
 
     return {
       ciphertext: ciphertext,
       iv: ivHex,
       salt: this.saltHex,
       authTag: authTag,
-      sizeBytes: ciphertext.length // Always constant
+      sizeBytes: ciphertext.length
     };
   }
 
@@ -134,21 +146,21 @@ class StealthCrypto {
    * Decrypt and strip padding envelope
    */
   async decrypt(payload) {
-    if (!this.activeKey) {
+    if (!this.activeEncKey || !this.activeMacKey) {
       throw new Error('Cryptographic key not initialized');
     }
 
     const { ciphertext, iv, authTag } = payload;
 
-    // 1. Verify HMAC with Constant-Time Check (Timing Attack Defense)
-    const expectedTag = CryptoJS.HmacSHA256(ciphertext + iv, this.activeKey).toString();
+    // 1. Verify HMAC with Constant-Time Check using dedicated MAC Key
+    const expectedTag = CryptoJS.HmacSHA256(ciphertext + ':' + iv, this.activeMacKey).toString();
     if (!StealthCrypto.timingSafeEqual(expectedTag, authTag)) {
       throw new Error('Decryption Failed: Authentication Tag mismatch or incorrect Secret Passphrase.');
     }
 
-    // 2. Decrypt with AES-256
+    // 2. Decrypt with dedicated Encryption Key
     const ivWords = CryptoJS.enc.Hex.parse(iv);
-    const decryptedBytes = CryptoJS.AES.decrypt(ciphertext, this.activeKey, {
+    const decryptedBytes = CryptoJS.AES.decrypt(ciphertext, this.activeEncKey, {
       iv: ivWords,
       mode: CryptoJS.mode.CBC,
       padding: CryptoJS.pad.Pkcs7
@@ -165,7 +177,8 @@ class StealthCrypto {
   }
 
   destroy() {
-    this.activeKey = null;
+    this.activeEncKey = null;
+    this.activeMacKey = null;
     this.rawPassphrase = null;
     this.saltHex = null;
   }

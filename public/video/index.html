@@ -82,6 +82,27 @@
       gap: 8px;
     }
 
+    
+    .back-to-chat-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      border-radius: 999px;
+      background: rgba(99, 102, 241, 0.18);
+      border: 1px solid rgba(99, 102, 241, 0.4);
+      color: #a5b4fc;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      text-decoration: none;
+    }
+    .back-to-chat-btn:hover {
+      background: rgba(99, 102, 241, 0.3);
+      border-color: #818cf8;
+      color: #fff;
+    }
     .chat-peer-btn {
       display: inline-flex;
       align-items: center;
@@ -530,9 +551,13 @@
       <div class="brand-title">AEGIS VIDEO</div>
     </div>
     <div class="video-header-right">
+      <button type="button" id="btnBackToChat" class="back-to-chat-btn" title="Return to Encrypted Text Chat" aria-label="Return to Chat">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <span>Return to Chat</span>
+      </button>
       <button type="button" id="btnActivePeersVideo" class="chat-peer-btn" style="display: none;" title="View members in room" aria-label="Active Peers">
         <span class="status-indicator-dot"></span>
-        <span id="videoPeerCount">1</span> online
+        <span id="videoPeerCount">1</span> in call
       </button>
       <div id="roomBadge" class="room-badge" style="display: none;">Room: <span id="roomBadgeText"></span></div>
     </div>
@@ -606,6 +631,11 @@
       <!-- Switch Camera (Front / Back for Phones) -->
       <button type="button" id="btnFlipCamera" class="ctrl-btn" title="Flip Camera" aria-label="Flip Camera">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0-4.42-3.58-8-8-8s-8 3.58-8 8"/><path d="M4 10l-3-3 3-3"/><path d="M4 14c0 4.42 3.58 8 8 8s8-3.58 8-8"/><path d="M20 14l3 3-3 3"/></svg>
+      </button>
+
+      <!-- Return to Text Chat Button -->
+      <button type="button" id="btnReturnToChatFromCall" class="ctrl-btn" title="Return to Text Chat" aria-label="Return to Text Chat" style="border-color: rgba(99, 102, 241, 0.4); color: #a5b4fc;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
       </button>
 
       <!-- End Call Button -->
@@ -702,12 +732,22 @@
         setTimeout(() => { toastBox.style.display = 'none'; }, 2600);
       };
 
-      // Read Hash params if linked from chat
+      // Read Hash params & session if linked from chat
+      let secretKey = '';
       const hash = window.location.hash.substring(1);
       if (hash) {
         const p = new URLSearchParams(hash);
         if (p.get('room')) videoRoomInput.value = p.get('room');
         if (p.get('codename')) videoCodenameInput.value = p.get('codename');
+        if (p.get('key')) secretKey = p.get('key');
+      }
+      if (!secretKey) {
+        try {
+          const saved = JSON.parse(sessionStorage.getItem('aegis_session') || '{}');
+          if (saved.passphrase) secretKey = saved.passphrase;
+          if (!videoRoomInput.value && saved.room) videoRoomInput.value = saved.room;
+          if (!videoCodenameInput.value && saved.codename) videoCodenameInput.value = saved.codename;
+        } catch (e) {}
       }
 
       if (!videoCodenameInput.value) {
@@ -971,7 +1011,8 @@
           ws.send(JSON.stringify({
             type: 'join',
             roomId: currentRoom,
-            peerId: codename
+            peerId: codename,
+            clientType: 'video'
           }));
         };
 
@@ -980,25 +1021,27 @@
             const msg = JSON.parse(evt.data);
 
             if (msg.type === 'presence') {
-              if (msg.peers && Array.isArray(msg.peers)) {
+              // Only count and track peers who are actually in the video call
+              if (msg.videoPeers && Array.isArray(msg.videoPeers)) {
+                activePeers = msg.videoPeers;
+              } else if (msg.peers && Array.isArray(msg.peers)) {
                 activePeers = msg.peers;
               } else {
                 activePeers = [codename];
               }
               updatePeerBadge();
 
-              // When another peer joins
-              if (msg.event === 'join' && msg.peerId !== codename) {
+              // When another video peer joins
+              if (msg.event === 'join' && msg.peerId !== codename && (!msg.clientType || msg.clientType === 'video')) {
                 showToast(`👤 ${msg.peerId} joined call`);
-                // If there was an old stale peer connection, reset it first
                 if (peerConnection) {
                   clearRemotePeer(null);
                 }
                 createAndSendOffer();
               }
 
-              // When peer leaves: CLEAR VIDEO BUFFER IMMEDIATELY (no frozen frame!)
-              if (msg.event === 'leave') {
+              // When a video peer leaves
+              if (msg.event === 'leave' && (!msg.clientType || msg.clientType === 'video')) {
                 clearRemotePeer(`👤 ${msg.peerId || 'A peer'} left the call`);
               }
             }
@@ -1089,13 +1132,33 @@
           const item = document.createElement('div');
           item.className = 'peer-item-card';
           const isYou = (name === codename);
-          item.innerHTML = `
-            <div class="peer-name-wrap">
-              <span style="font-size: 1.1rem;">👤</span>
-              <span style="font-weight: 600;">${name}</span>
-            </div>
-            ${isYou ? '<span class="peer-badge-you">YOU</span>' : '<span style="color: #34d399; font-size: 0.72rem; font-weight: 600;">● In Call</span>'}
-          `;
+
+          const wrap = document.createElement('div');
+          wrap.className = 'peer-name-wrap';
+
+          const icon = document.createElement('span');
+          icon.style.fontSize = '1.1rem';
+          icon.textContent = '👤';
+
+          const nameSpan = document.createElement('span');
+          nameSpan.style.fontWeight = '600';
+          nameSpan.textContent = name; // Safe against DOM XSS
+
+          wrap.appendChild(icon);
+          wrap.appendChild(nameSpan);
+          item.appendChild(wrap);
+
+          const badge = document.createElement('span');
+          if (isYou) {
+            badge.className = 'peer-badge-you';
+            badge.textContent = 'YOU';
+          } else {
+            badge.style.color = '#34d399';
+            badge.style.fontSize = '0.72rem';
+            badge.style.fontWeight = '600';
+            badge.textContent = '● In Call';
+          }
+          item.appendChild(badge);
           videoPeersListContainer.appendChild(item);
         });
         videoPeersModal.style.display = 'flex';
@@ -1244,6 +1307,21 @@
         waitingState.style.display = 'flex';
         showToast('Call ended');
       };
+
+      // Return to Text Chat seamlessly
+      const returnToChat = () => {
+        endCall();
+        const r = encodeURIComponent(currentRoom || videoRoomInput.value.trim() || '');
+        const c = encodeURIComponent(codename || videoCodenameInput.value.trim() || '');
+        const k = encodeURIComponent(secretKey || '');
+        window.location.href = '/' + (r ? `#room=${r}&codename=${c}&key=${k}` : '');
+      };
+
+      const btnBackToChat = document.getElementById('btnBackToChat');
+      if (btnBackToChat) btnBackToChat.addEventListener('click', returnToChat);
+
+      const btnReturnToChatFromCall = document.getElementById('btnReturnToChatFromCall');
+      if (btnReturnToChatFromCall) btnReturnToChatFromCall.addEventListener('click', returnToChat);
 
       btnEndCall.addEventListener('click', endCall);
     })();

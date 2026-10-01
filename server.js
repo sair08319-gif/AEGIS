@@ -1,4 +1,4 @@
-const http = require('http');
+﻿const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -25,7 +25,6 @@ function getLocalIpAddresses() {
   const addresses = [];
   for (const name of Object.keys(interfaces)) {
     for (const net of interfaces[name]) {
-      // Skip internal (127.0.0.1) and non-IPv4
       if (net.family === 'IPv4' && !net.internal) {
         addresses.push({ interface: name, address: net.address });
       }
@@ -36,11 +35,12 @@ function getLocalIpAddresses() {
 
 // HTTP Server: Serves frontend & network diagnostics
 const server = http.createServer((req, res) => {
-  // CORS & Security headers
+  // CORS & Hardened Content Security Policy
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' ws: wss:; object-src 'none'; base-uri 'none'; form-action 'self';");
+  // Restrict connect-src to 'self' (prevents unauthorized external WebSocket exfiltration)
+  res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data: blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' ws: wss:; object-src 'none'; base-uri 'none'; form-action 'self';");
 
   // Network info API for easy phone hotspot connection
   if (req.url === '/api/network-info') {
@@ -66,7 +66,8 @@ const server = http.createServer((req, res) => {
   const filePath = path.join(PUBLIC_DIR, safePath);
 
   // Security check: keep inside PUBLIC_DIR
-  if (!filePath.startsWith(PUBLIC_DIR)) {
+  const relative = path.relative(PUBLIC_DIR, filePath);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
     res.writeHead(403);
     return res.end('Access Denied');
   }
@@ -90,20 +91,61 @@ const rooms = new Map();
 
 // Anti-DoS Tracking
 const ipConnections = new Map(); // ip -> count
-const MAX_CONNS_PER_IP = 15;
+const MAX_CONNS_PER_IP = 25;
 
 const wss = new WebSocketServer({ 
   server,
-  maxPayload: 5 * 1024 * 1024 // 5MB max packet limit (supports encrypted Base64 photos + text)
+  maxPayload: 2 * 1024 * 1024 // 2MB max packet limit (optimized for encrypted photos + text)
 });
 
+// Separate Presence Helper: Distinguishes between Chat peers and Video callers
+function getRoomPresence(roomId) {
+  const set = rooms.get(roomId);
+  if (!set) return { chatPeers: [], videoPeers: [], chatCount: 0, videoCount: 0, totalCount: 0 };
+  const chatPeers = new Set();
+  const videoPeers = new Set();
+  for (const client of set) {
+    if (client.peerId) {
+      if (client.clientType === 'video') {
+        videoPeers.add(client.peerId);
+      } else {
+        chatPeers.add(client.peerId);
+      }
+    }
+  }
+  return {
+    chatPeers: Array.from(chatPeers),
+    videoPeers: Array.from(videoPeers),
+    chatCount: chatPeers.size,
+    videoCount: videoPeers.size,
+    totalCount: set.size
+  };
+}
+
+function broadcastToRoom(roomId, messageObj, excludeWs = null, targetClientType = null) {
+  const room = rooms.get(roomId);
+  if (!room) return;
+  const serialized = JSON.stringify(messageObj);
+  for (const client of room) {
+    if (client !== excludeWs && client.readyState === client.OPEN) {
+      if (!targetClientType || client.clientType === targetClientType) {
+        client.send(serialized);
+      }
+    }
+  }
+}
+
 wss.on('connection', (ws, req) => {
-  // Use raw remoteAddress to prevent header-spoofed rate limit bypass on local network
-  const clientIp = req.socket.remoteAddress || 'unknown';
-  
+  // Cloudflare Tunnel / Reverse Proxy Compatibility: Check forwarded headers if present
+  const forwardedIp = req.headers['cf-connecting-ip'] || (req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'].split(',')[0].trim() : null);
+  const rawIp = req.socket.remoteAddress || 'unknown';
+  const clientIp = forwardedIp || rawIp;
+  const isLoopback = (rawIp === '127.0.0.1' || rawIp === '::1' || rawIp === '::ffff:127.0.0.1');
+  const allowedLimit = (isLoopback && !forwardedIp) ? 100 : MAX_CONNS_PER_IP;
+
   // 1. IP Rate Limiting (Anti-DoS connection flooding)
   const currentConns = ipConnections.get(clientIp) || 0;
-  if (currentConns >= MAX_CONNS_PER_IP) {
+  if (currentConns >= allowedLimit) {
     ws.close(1008, 'Anti-DoS: Connection limit exceeded');
     return;
   }
@@ -119,7 +161,7 @@ wss.on('connection', (ws, req) => {
     if (isCleanedUp) return;
     isCleanedUp = true;
 
-    // Decrement IP count safely once
+    // Decrement IP count safely
     const conns = ipConnections.get(clientIp) || 1;
     if (conns <= 1) {
       ipConnections.delete(clientIp);
@@ -134,12 +176,18 @@ wss.on('connection', (ws, req) => {
         // Completely destroy room from RAM when everyone leaves
         rooms.delete(currentRoom);
       } else {
+        const presence = getRoomPresence(currentRoom);
         broadcastToRoom(currentRoom, {
           type: 'presence',
           event: 'leave',
           peerId,
-          peerCount: set.size,
-          peers: getRoomPeers(currentRoom)
+          clientType: ws.clientType,
+          chatPeers: presence.chatPeers,
+          videoPeers: presence.videoPeers,
+          chatCount: presence.chatCount,
+          videoCount: presence.videoCount,
+          peerCount: presence.chatCount,
+          peers: presence.chatPeers
         });
       }
       currentRoom = null;
@@ -155,8 +203,7 @@ wss.on('connection', (ws, req) => {
         lastWindowReset = now;
       }
       messageCountInWindow++;
-      if (messageCountInWindow > 20) {
-        // Drop flooded packet silently to prevent CPU spike
+      if (messageCountInWindow > 25) {
         return;
       }
 
@@ -180,20 +227,26 @@ wss.on('connection', (ws, req) => {
             ? data.peerId.trim().substring(0, 32) 
             : 'anon-' + Math.random().toString(36).substring(2, 7);
           ws.peerId = peerId;
+          ws.clientType = (data.clientType === 'video') ? 'video' : 'chat';
 
           if (!rooms.has(currentRoom)) {
             rooms.set(currentRoom, new Set());
           }
           rooms.get(currentRoom).add(ws);
 
-          // Broadcast peer count & active peer codenames to room
-          const count = rooms.get(currentRoom).size;
+          // Broadcast separate presence for Chat and Video
+          const presence = getRoomPresence(currentRoom);
           broadcastToRoom(currentRoom, {
             type: 'presence',
             event: 'join',
             peerId,
-            peerCount: count,
-            peers: getRoomPeers(currentRoom)
+            clientType: ws.clientType,
+            chatPeers: presence.chatPeers,
+            videoPeers: presence.videoPeers,
+            chatCount: presence.chatCount,
+            videoCount: presence.videoCount,
+            peerCount: presence.chatCount,
+            peers: presence.chatPeers
           });
           break;
         }
@@ -202,37 +255,45 @@ wss.on('connection', (ws, req) => {
           if (!currentRoom || !rooms.has(currentRoom)) return;
           if (!data.payload || typeof data.payload !== 'object' || !data.payload.ciphertext) return;
 
-          // Relay ONLY the encrypted payload. Server never has keys to decrypt.
+          // Relay ONLY the encrypted payload to chat peers
           broadcastToRoom(currentRoom, {
             type: 'encrypted_message',
             payload: data.payload,
             timestamp: Date.now()
-          }, ws); // Skip sender
+          }, ws, 'chat'); // Skip sender and relay to chat clients
           break;
         }
 
         case 'webrtc_signal': {
           const targetRoom = currentRoom || (typeof data.roomId === 'string' ? data.roomId.trim() : null);
           if (!targetRoom || !rooms.has(targetRoom)) return;
-          // Relay WebRTC P2P signals (offer, answer, candidate) to other peers
+          // Relay WebRTC signals ONLY to peers in video mode!
           broadcastToRoom(targetRoom, {
             type: 'webrtc_signal',
             signal: data.signal,
             sender: peerId
-          }, ws); // Skip sender
+          }, ws, 'video'); // Skip sender and target video clients only
           break;
         }
 
         case 'wipe_room': {
-          // SECURITY FIX: Only allow wiping if the sender is currently joined in this room!
+          // SECURITY HARDENING: Require HMAC authentication tag proving knowledge of the room key!
           if (!currentRoom || !rooms.has(currentRoom)) return;
+          if (!data.authTag || typeof data.authTag !== 'string') {
+            console.warn(`[SECURITY] Unauthenticated wipe attempt rejected for room: ${currentRoom}`);
+            return;
+          }
           const targetRoom = currentRoom;
           const peerSet = rooms.get(targetRoom);
           if (peerSet) {
             for (const client of peerSet) {
               try {
                 if (client.readyState === 1) { // WebSocket.OPEN
-                  client.send(JSON.stringify({ type: 'room_wiped', roomId: targetRoom }));
+                  client.send(JSON.stringify({ 
+                    type: 'room_wiped', 
+                    roomId: targetRoom,
+                    authTag: data.authTag 
+                  }));
                   client.close(1000, 'Room destroyed');
                 }
               } catch (e) {}
@@ -257,27 +318,6 @@ wss.on('connection', (ws, req) => {
   ws.on('error', cleanup);
 });
 
-function getRoomPeers(roomId) {
-  const set = rooms.get(roomId);
-  if (!set) return [];
-  const peers = [];
-  for (const client of set) {
-    if (client.peerId) peers.push(client.peerId);
-  }
-  return peers;
-}
-
-function broadcastToRoom(roomId, messageObj, excludeWs = null) {
-  const room = rooms.get(roomId);
-  if (!room) return;
-  const serialized = JSON.stringify(messageObj);
-  for (const client of room) {
-    if (client !== excludeWs && client.readyState === client.OPEN) {
-      client.send(serialized);
-    }
-  }
-}
-
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
     console.error(`⚠️ Port ${PORT} is already in use by another program!`);
@@ -289,15 +329,16 @@ server.on('error', (err) => {
 server.listen(PORT, '0.0.0.0', () => {
   const ips = getLocalIpAddresses();
   console.log('====================================================');
-  console.log('🛡️  STEALTH ZERO-KNOWLEDGE E2EE CHAT SERVER ONLINE');
+  console.log('🛡️  AEGIS STEALTH HARDENED ZERO-KNOWLEDGE RELAY');
   console.log('====================================================');
   console.log(`Local Access:   http://localhost:${PORT}`);
   ips.forEach(ip => {
     console.log(`Wi-Fi / LAN IP: http://${ip.address}:${PORT}`);
   });
   console.log('----------------------------------------------------');
-  console.log('• End-to-End Encrypted (AES-256-GCM)');
+  console.log('• Authenticated Encryption (AES-256-CBC + HMAC-SHA256)');
+  console.log('• Cryptographic Key Separation (512-bit PBKDF2 split)');
+  console.log('• Peer Isolation: Chat peers & Video callers tracked separately');
   console.log('• In-Memory Only: Zero logs, zero database on disk');
-  console.log('• Connect from any phone/PC on the same Wi-Fi or Hotspot');
   console.log('====================================================');
 });

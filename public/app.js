@@ -102,6 +102,36 @@
   let currentRoom = '';
   let codename = '';
   let activePeersList = [];
+  let activeChatPeers = [];
+  let activeVideoPeers = [];
+  let sessionMessages = [];
+
+  const saveActiveSession = (room, name, pass) => {
+    try {
+      sessionStorage.setItem('aegis_session', JSON.stringify({
+        room: room,
+        codename: name,
+        passphrase: pass,
+        savedAt: Date.now()
+      }));
+    } catch (e) {}
+  };
+
+  const saveMessagesToSession = () => {
+    try {
+      const toSave = sessionMessages
+        .filter(m => !m.burnSeconds || m.burnSeconds === 0)
+        .slice(-50);
+      sessionStorage.setItem('aegis_session_msgs', JSON.stringify(toSave));
+    } catch (e) {}
+  };
+
+  const clearActiveSession = () => {
+    try {
+      sessionStorage.removeItem('aegis_session');
+      sessionStorage.removeItem('aegis_session_msgs');
+    } catch (e) {}
+  };
   let currentReply = null;
   let typingTimeout = null;
   let lastTypingSent = 0;
@@ -643,7 +673,14 @@
         ? activePeersList
         : [codename];
 
-      listToShow.forEach(name => {
+      // Section 1: Chat Peers
+      const chatHeader = document.createElement('div');
+      chatHeader.style.cssText = 'font-size: 0.72rem; font-weight: 700; color: #10b981; letter-spacing: 0.05em; margin: 4px 0 6px 2px; text-transform: uppercase; display: flex; justify-content: space-between; align-items: center;';
+      chatHeader.innerHTML = `<span>💬 Text Chat Members</span><span style="background: rgba(16,185,129,0.15); padding: 1px 7px; border-radius: 999px;">${activeChatPeers.length || 1}</span>`;
+      peersListContainer.appendChild(chatHeader);
+
+      const chatList = (activeChatPeers && activeChatPeers.length > 0) ? activeChatPeers : [codename];
+      chatList.forEach(name => {
         const item = document.createElement('div');
         item.className = 'peer-item-card';
         const isYou = (name === codename);
@@ -652,10 +689,37 @@
             <span style="font-size: 1.1rem;">👤</span>
             <span style="font-weight: 600;">${escapeHtml(name)}</span>
           </div>
-          ${isYou ? '<span class="peer-badge-you">YOU</span>' : '<span style="color: #34d399; font-size: 0.72rem; font-weight: 600;">● Online</span>'}
+          ${isYou ? '<span class="peer-badge-you">YOU</span>' : '<span style="color: #34d399; font-size: 0.72rem; font-weight: 600;">● In Chat</span>'}
         `;
         peersListContainer.appendChild(item);
       });
+
+      // Section 2: Video Callers
+      const videoHeader = document.createElement('div');
+      videoHeader.style.cssText = 'font-size: 0.72rem; font-weight: 700; color: #06b6d4; letter-spacing: 0.05em; margin: 14px 0 6px 2px; text-transform: uppercase; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 10px; display: flex; justify-content: space-between; align-items: center;';
+      videoHeader.innerHTML = `<span>📹 Active in Video Call</span><span style="background: rgba(6,182,212,0.15); padding: 1px 7px; border-radius: 999px;">${activeVideoPeers.length}</span>`;
+      peersListContainer.appendChild(videoHeader);
+
+      if (activeVideoPeers.length === 0) {
+        const emptyNote = document.createElement('div');
+        emptyNote.style.cssText = 'font-size: 0.75rem; color: var(--text-muted); font-style: italic; padding: 6px 10px; background: rgba(255,255,255,0.02); border-radius: 8px;';
+        emptyNote.textContent = 'No peers are currently in video call.';
+        peersListContainer.appendChild(emptyNote);
+      } else {
+        activeVideoPeers.forEach(name => {
+          const item = document.createElement('div');
+          item.className = 'peer-item-card';
+          const isYou = (name === codename);
+          item.innerHTML = `
+            <div class="peer-name-wrap">
+              <span style="font-size: 1.1rem;">🎥</span>
+              <span style="font-weight: 600;">${escapeHtml(name)}</span>
+            </div>
+            <span style="color: #06b6d4; font-size: 0.72rem; font-weight: 600;">${isYou ? 'YOU (In Call)' : '● In Call'}</span>
+          `;
+          peersListContainer.appendChild(item);
+        });
+      }
 
       peersModal.style.display = 'flex';
     });
@@ -670,6 +734,8 @@
   // Video Call Launch Trigger (/video)
   if (btnOpenVideo) {
     btnOpenVideo.addEventListener('click', () => {
+      saveActiveSession(currentRoom, codename, passphraseInput.value);
+      saveMessagesToSession();
       const roomParam = encodeURIComponent(currentRoom || '');
       const codeParam = encodeURIComponent(codename || '');
       const keyParam = encodeURIComponent(passphraseInput.value || '');
@@ -696,18 +762,10 @@
     btnCancelReply.addEventListener('click', cancelReply);
   }
 
-  // Form Submit: Initialize Crypto & Connect
-  joinForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-
-    codename = usernameInput.value.trim() || generateCodename();
-    currentRoom = roomInput.value.trim();
-    const passphrase = passphraseInput.value.trim();
-
-    if (!currentRoom || !passphrase) {
-      alert('Room ID and Secret Passphrase are required.');
-      return;
-    }
+  // Core Room Initialization & Join Workflow
+  const enterRoom = async (roomId, passphrase, userCodename) => {
+    currentRoom = roomId;
+    codename = userCodename || generateCodename();
 
     if (cryptoStatusLabel) cryptoStatusLabel.textContent = 'DERIVING KEY (PBKDF2)...';
 
@@ -727,15 +785,33 @@
       if (chatActionGroup) chatActionGroup.style.display = 'inline-flex';
       if (headerSymbolDock) headerSymbolDock.style.display = 'none';
 
+      // Save active session for instant return from video or page refresh
+      saveActiveSession(currentRoom, codename, passphrase);
+
       // Start Chaff (Dummy Traffic) Generator
       startChaffGenerator();
 
-      messageInput.focus();
+      if (messageInput) messageInput.focus();
     } catch (err) {
       console.error(err);
       alert('Cryptographic key initialization error: ' + err.message);
       if (cryptoStatusLabel) cryptoStatusLabel.textContent = 'CRYPTO ERROR';
     }
+  };
+
+  // Form Submit: Initialize Crypto & Connect
+  joinForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const cName = usernameInput.value.trim() || generateCodename();
+    const rId = roomInput.value.trim();
+    const pass = passphraseInput.value.trim();
+
+    if (!rId || !pass) {
+      alert('Room ID and Secret Passphrase are required.');
+      return;
+    }
+
+    await enterRoom(rId, pass, cName);
   });
 
   // Calculate Memorable Anti-Phishing Safety Fingerprint (4 Emoji Verification)
@@ -773,16 +849,19 @@
               timestamp: Date.now()
             });
 
+            const dummyPktId = 'pkt-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 9);
+            markAuthTagSeen(encryptedDummy.authTag);
+
+            // Indistinguishable schema: identical keys and id prefix as real messages
             ws.send(JSON.stringify({
               type: 'encrypted_message',
               roomId: currentRoom,
               payload: {
-                id: 'chaff-' + Math.random().toString(36).substring(2, 8),
+                id: dummyPktId,
                 ciphertext: encryptedDummy.ciphertext,
                 iv: encryptedDummy.iv,
                 salt: encryptedDummy.salt,
-                authTag: encryptedDummy.authTag,
-                burnSeconds: 0
+                authTag: encryptedDummy.authTag
               }
             }));
             chaffPacketsSent++;
@@ -821,7 +900,8 @@
       ws.send(JSON.stringify({
         type: 'join',
         roomId: roomId,
-        peerId: codename
+        peerId: codename,
+        clientType: 'chat'
       }));
     };
 
@@ -831,11 +911,36 @@
 
         switch (msg.type) {
           case 'presence': {
-            if (msg.peerCount !== undefined) {
-              if (peerCountLabel) peerCountLabel.textContent = msg.peerCount;
+            if (Array.isArray(msg.chatPeers)) {
+              activeChatPeers = msg.chatPeers;
+            } else if (Array.isArray(msg.peers)) {
+              activeChatPeers = msg.peers;
+            } else {
+              activeChatPeers = [codename];
             }
-            if (Array.isArray(msg.peers)) {
-              activePeersList = msg.peers;
+
+            if (Array.isArray(msg.videoPeers)) {
+              activeVideoPeers = msg.videoPeers;
+            } else {
+              activeVideoPeers = [];
+            }
+            activePeersList = activeChatPeers;
+
+            if (peerCountLabel) {
+              peerCountLabel.textContent = activeChatPeers.length;
+            }
+            if (peerDockBtn) {
+              peerDockBtn.dataset.tooltip = `Chat: ${activeChatPeers.length} online | Video: ${activeVideoPeers.length} in call`;
+            }
+
+            const videoBadge = document.getElementById('videoCallLiveBadge');
+            if (videoBadge) {
+              if (activeVideoPeers.length > 0) {
+                videoBadge.textContent = `${activeVideoPeers.length} in call`;
+                videoBadge.style.display = 'inline-block';
+              } else {
+                videoBadge.style.display = 'none';
+              }
             }
             break;
           }
@@ -846,7 +951,17 @@
           }
 
           case 'room_wiped': {
-            triggerWipe(true);
+            // Cryptographic Verification: Verify wipe packet was signed with the room's MAC key
+            if (window.stealthCrypto.activeMacKey && msg.authTag) {
+              const expected = CryptoJS.HmacSHA256('WIPE_ROOM:' + currentRoom, window.stealthCrypto.activeMacKey).toString();
+              if (StealthCrypto.timingSafeEqual(expected, msg.authTag)) {
+                triggerWipe(true);
+              } else {
+                console.warn('[SECURITY] Unauthenticated room wipe rejected: invalid authTag');
+              }
+            } else {
+              triggerWipe(true);
+            }
             break;
           }
         }
@@ -864,14 +979,14 @@
     };
   };
 
-  // Replay Attack Cache (Prevents intercepted packets from being re-sent)
-  const seenPacketIds = new Set();
-  const markPacketSeen = (id) => {
-    if (!id) return;
-    seenPacketIds.add(id);
-    if (seenPacketIds.size > 400) {
-      const oldest = seenPacketIds.values().next().value;
-      seenPacketIds.delete(oldest);
+  // Replay Attack Cache: Authenticated against cryptographic authTag
+  const seenAuthTags = new Set();
+  const markAuthTagSeen = (tag) => {
+    if (!tag) return;
+    seenAuthTags.add(tag);
+    if (seenAuthTags.size > 500) {
+      const oldest = seenAuthTags.values().next().value;
+      seenAuthTags.delete(oldest);
     }
   };
 
@@ -879,13 +994,13 @@
   const handleIncomingEncryptedMessage = async (payload) => {
     if (!payload || !payload.ciphertext || !payload.iv || !payload.authTag) return;
 
-    // 1. Replay Attack Protection: Drop duplicate packets
-    if (payload.id && seenPacketIds.has(payload.id)) {
-      console.warn('Replay attack blocked: Duplicate packet ID received.');
+    // 1. Replay Attack Protection: Drop packets with duplicate cryptographic authTag
+    if (payload.authTag && seenAuthTags.has(payload.authTag)) {
+      console.warn('Replay attack blocked: Duplicate authTag received.');
       return;
     }
-    if (payload.id) {
-      markPacketSeen(payload.id);
+    if (payload.authTag) {
+      markAuthTagSeen(payload.authTag);
     }
 
     try {
@@ -967,8 +1082,8 @@
     // 1. Encrypt with Fixed-Size 2048-Byte Padding (or dynamic size for photo payloads)
     const encrypted = await window.stealthCrypto.encrypt(messageData);
 
-    const packetId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9);
-    markPacketSeen(packetId);
+    const packetId = 'pkt-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 9);
+    markAuthTagSeen(encrypted.authTag);
 
     // 2. Transmit over WebSocket (No unencrypted burnSeconds in outer packet!)
     const packet = {
@@ -1000,8 +1115,22 @@
     });
   });
 
-  // Render Message Bubble with Complete Auto-Burn RAM Purge
-  const renderMessage = ({ sender, text = '', image = null, replyTo = null, timestamp, isOutgoing, isError = false, rawCiphertext = '', burnSeconds = 0 }) => {
+  // Render Message Bubble with Complete Auto-Burn RAM Purge & Session Persistence
+  const renderMessage = ({ sender, text = '', image = null, replyTo = null, timestamp, isOutgoing, isError = false, rawCiphertext = '', burnSeconds = 0 }, saveToSession = true) => {
+    if (saveToSession && !isError && (!burnSeconds || burnSeconds === 0)) {
+      sessionMessages.push({
+        sender,
+        text,
+        image,
+        replyTo,
+        timestamp,
+        isOutgoing,
+        isError,
+        rawCiphertext,
+        burnSeconds: 0
+      });
+      saveMessagesToSession();
+    }
     const row = document.createElement('div');
     row.className = `msg-row ${isOutgoing ? 'outgoing' : 'incoming'}`;
 
@@ -1154,7 +1283,14 @@
 
     if (!isIncoming && ws && ws.readyState === WebSocket.OPEN) {
       try {
-        ws.send(JSON.stringify({ type: 'wipe_room', roomId: currentRoom }));
+        const wipeTag = window.stealthCrypto.activeMacKey
+          ? CryptoJS.HmacSHA256('WIPE_ROOM:' + currentRoom, window.stealthCrypto.activeMacKey).toString()
+          : 'unauthenticated';
+        ws.send(JSON.stringify({ 
+          type: 'wipe_room', 
+          roomId: currentRoom,
+          authTag: wipeTag
+        }));
       } catch (e) {}
     }
 
@@ -1163,9 +1299,12 @@
       ws = null;
     }
 
+    clearActiveSession();
+    sessionMessages = [];
+
     // Zero out cryptographic keys and active buffers in RAM
     window.stealthCrypto.destroy();
-    seenPacketIds.clear();
+    seenAuthTags.clear();
     messagesViewport.innerHTML = '';
     messageInput.value = '';
     passphraseInput.value = '';
@@ -1199,6 +1338,54 @@
     triggerWipe(false);
   };
 
+  // Seamless Session Restoration (Restores Room & Chat History after Video / Refresh)
+  const checkAndRestoreSession = async () => {
+    let room = null;
+    let name = null;
+    let pass = null;
+
+    // 1. Read URL hash parameters
+    const hash = window.location.hash.substring(1);
+    if (hash) {
+      const p = new URLSearchParams(hash);
+      room = p.get('room');
+      pass = p.get('key');
+      name = p.get('codename');
+    }
+
+    // 2. Read from sessionStorage if not in hash
+    if (!room || !pass) {
+      try {
+        const saved = JSON.parse(sessionStorage.getItem('aegis_session') || '{}');
+        if (saved.room && saved.passphrase) {
+          room = saved.room;
+          pass = saved.passphrase;
+          if (!name) name = saved.codename;
+        }
+      } catch (e) {}
+    }
+
+    if (room && pass) {
+      roomInput.value = room;
+      passphraseInput.value = pass;
+      if (name) usernameInput.value = name;
+
+      await enterRoom(room, pass, name || usernameInput.value || generateCodename());
+
+      // Restore previously exchanged messages so chat is never blank
+      try {
+        const savedMsgs = JSON.parse(sessionStorage.getItem('aegis_session_msgs') || '[]');
+        if (Array.isArray(savedMsgs) && savedMsgs.length > 0) {
+          sessionMessages = [];
+          savedMsgs.forEach(m => renderMessage(m, false));
+        }
+      } catch (e) {}
+    }
+  };
+
+  // Auto-run session check
+  checkAndRestoreSession();
+
   panicBtn.addEventListener('click', triggerPanicWipe);
 
   btnLeaveRoom.addEventListener('click', () => {
@@ -1208,8 +1395,10 @@
       ws.send(JSON.stringify({ type: 'leave', roomId: currentRoom }));
       ws.close();
     }
+    clearActiveSession();
+    sessionMessages = [];
     window.stealthCrypto.destroy();
-    seenPacketIds.clear();
+    seenAuthTags.clear();
     messagesViewport.innerHTML = '';
     screenChat.style.display = 'none';
     if (chatHeaderInfo) chatHeaderInfo.style.display = 'none';
