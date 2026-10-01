@@ -1,6 +1,7 @@
 ﻿# 🛡️ Aegis Stealth Chat — Project Checkpoint & Session Restore
 
-**Project Location:** `Z:\secure-stealth-chat`
+**Project Location:** `Z:\secure-stealth-chat`  
+**Brain & Master Knowledge Base:** `Z:\secure-stealth-chat\brain\BRAIN.md`
 
 ---
 
@@ -23,9 +24,9 @@ node server.js
 
 ---
 
-## 💬 How to Continue in IDE Chat
+## 💬 How to Continue in Any AI Chat Session
 
-If you open a new chat window, send this prompt:
-> **"Resume stealth chat at Z:\secure-stealth-chat"**
+If you open a new chat window or lose this conversation, send this prompt:
+> **"Resume Aegis Stealth Chat. Read Z:\secure-stealth-chat\brain\BRAIN.md and continue from the latest task."**
 
-All files, security hardenings (AES-256-CBC, PBKDF2 30k rounds, HMAC-SHA256, 2KB padding, dummy traffic, image attachments, auto-burn, WebRTC video calling, panic wipe), and setup are completely saved and ready.
+All files, security hardenings, complete flaw audit, transcripts of past sessions, and prioritized next steps are fully documented inside the `brain/` folder.
