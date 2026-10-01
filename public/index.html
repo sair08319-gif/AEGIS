@@ -203,6 +203,109 @@
     </main>
   </div>
 
+
+  <!-- Floating Draggable Touch Video Bubble -->
+  <div id="floatingVideoBubble" class="floating-video-bubble" style="display: none;">
+    <div class="bubble-header-drag" id="bubbleDragHandle" title="Drag to move anywhere">
+      <div class="bubble-drag-dots">
+        <span></span><span></span><span></span>
+      </div>
+      <div class="bubble-header-actions">
+        <!-- Expand to Fullscreen Video -->
+        <button type="button" id="btnBubbleExpand" class="bubble-btn" title="Expand to Fullscreen" aria-label="Expand">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+        </button>
+        <!-- Quick Disconnect 'X' Button -->
+        <button type="button" id="btnBubbleClose" class="bubble-btn bubble-btn-close" title="Disconnect Video Call" aria-label="Disconnect">
+          ✕
+        </button>
+      </div>
+    </div>
+
+    <!-- Video Feed Container -->
+    <div class="bubble-video-wrap" id="bubbleVideoWrap" title="Click to expand">
+      <video id="bubbleRemoteVideo" class="bubble-remote-video" autoplay playsinline></video>
+      <div id="bubbleWaiting" class="bubble-waiting">
+        <div class="bubble-spinner"></div>
+        <span>Waiting for peer...</span>
+      </div>
+      <!-- Mini Self-View Pip in Bubble -->
+      <video id="bubbleLocalVideo" class="bubble-local-video" autoplay playsinline muted></video>
+    </div>
+
+    <!-- Bubble Quick Controls Bar -->
+    <div class="bubble-controls-bar">
+      <button type="button" id="btnBubbleMuteAudio" class="bubble-action-btn" title="Toggle Mic" aria-label="Mute Audio">
+        <svg id="bubbleIconMicOn" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+        <svg id="bubbleIconMicOff" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.2" style="display: none;"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2"/></svg>
+      </button>
+      <button type="button" id="btnBubbleToggleVideo" class="bubble-action-btn" title="Toggle Camera" aria-label="Toggle Camera">
+        <svg id="bubbleIconCamOn" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+        <svg id="bubbleIconCamOff" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.2" style="display: none;"><line x1="1" y1="1" x2="23" y2="23"/><path d="M21 15.5l-5-3.5 5-3.5v7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+      </button>
+      <span class="bubble-room-tag" id="bubbleRoomTag">Room</span>
+    </div>
+  </div>
+
+  <!-- Integrated In-App Fullscreen Video Call Stage Overlay -->
+  <div id="videoCallModal" class="video-modal-overlay" style="display: none;">
+    <div class="video-modal-header">
+      <div class="video-modal-brand">
+        <span class="brand-dot-pulse"></span>
+        <span class="video-modal-title">AEGIS SECURE VIDEO</span>
+        <span id="modalRoomBadge" class="modal-room-badge"></span>
+      </div>
+      <div class="video-modal-header-actions">
+        <!-- Minimize to Floating Bubble -->
+        <button type="button" id="btnMinimizeToBubble" class="video-modal-btn minimize-btn" title="Minimize to Floating Bubble" aria-label="Minimize">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+          <span>Chat Bubble</span>
+        </button>
+        <!-- End Call Button -->
+        <button type="button" id="btnModalEndCall" class="video-modal-btn end-call-btn" title="End Call" aria-label="End Call">
+          ✕ End Call
+        </button>
+      </div>
+    </div>
+
+    <!-- Video Stage -->
+    <div class="video-stage-inner">
+      <video id="modalRemoteVideo" class="modal-remote-video" autoplay playsinline></video>
+      <div id="modalWaitingState" class="modal-waiting-state">
+        <div class="waiting-pulse-ring">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+        <span>Connecting to encrypted video frequency...</span>
+        <small style="color: var(--text-muted); margin-top: 6px;">Waiting for peer to join call</small>
+      </div>
+      <!-- Self-View PiP -->
+      <div id="modalLocalPipWrap" class="modal-local-pip-wrap" title="Tap to toggle size">
+        <video id="modalLocalVideo" class="modal-local-video" autoplay playsinline muted></video>
+      </div>
+    </div>
+
+    <!-- Full Call Controls Bar -->
+    <div class="modal-call-controls">
+      <button type="button" id="btnModalToggleAudio" class="ctrl-btn" title="Toggle Mic" aria-label="Mute Audio">
+        <svg id="modalIconAudioOn" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        <svg id="modalIconAudioOff" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2"/></svg>
+      </button>
+      <button type="button" id="btnModalToggleVideo" class="ctrl-btn" title="Toggle Camera" aria-label="Toggle Camera">
+        <svg id="modalIconVideoOn" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+        <svg id="modalIconVideoOff" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;"><line x1="1" y1="1" x2="23" y2="23"/><path d="M21 15.5l-5-3.5 5-3.5v7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+      </button>
+      <button type="button" id="btnModalFlipCamera" class="ctrl-btn" title="Flip Camera" aria-label="Flip Camera">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0-4.42-3.58-8-8-8s-8 3.58-8 8"/><path d="M4 10l-3-3 3-3"/><path d="M4 14c0 4.42 3.58 8 8 8s8-3.58 8-8"/><path d="M20 14l3 3-3 3"/></svg>
+      </button>
+      <button type="button" id="btnModalMinimizeBottom" class="ctrl-btn" title="Minimize to Chat Bubble" aria-label="Minimize to Chat">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+      </button>
+      <button type="button" id="btnModalHangup" class="ctrl-btn end-call" title="End Call" aria-label="Hangup">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 11.36 11.36 0 0 0 3.53.56 2 2 0 0 1 2 2v3.08a2 2 0 0 1-2 2A19.86 19.86 0 0 1 3 4a2 2 0 0 1 2-2h3.08a2 2 0 0 1 2 2 11.36 11.36 0 0 0 .56 3.53 2 2 0 0 1-.45 2.11l-1.27 1.27z"/><line x1="23" y1="1" x2="1" y2="23"/></svg>
+      </button>
+    </div>
+  </div>
+
   <!-- Zero-Knowledge Image Lightbox Modal -->
   <div id="imageLightboxModal" class="image-lightbox-modal" style="display: none;">
     <div class="lightbox-backdrop" id="lightboxBackdrop"></div>

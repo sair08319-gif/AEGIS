@@ -39,6 +39,41 @@
   // Video Call Button
   const btnOpenVideo = document.getElementById('btnOpenVideo');
 
+  // Floating Video Bubble Elements
+  const floatingVideoBubble = document.getElementById('floatingVideoBubble');
+  const bubbleDragHandle = document.getElementById('bubbleDragHandle');
+  const btnBubbleExpand = document.getElementById('btnBubbleExpand');
+  const btnBubbleClose = document.getElementById('btnBubbleClose');
+  const bubbleRemoteVideo = document.getElementById('bubbleRemoteVideo');
+  const bubbleLocalVideo = document.getElementById('bubbleLocalVideo');
+  const bubbleWaiting = document.getElementById('bubbleWaiting');
+  const btnBubbleMuteAudio = document.getElementById('btnBubbleMuteAudio');
+  const btnBubbleToggleVideo = document.getElementById('btnBubbleToggleVideo');
+  const bubbleIconMicOn = document.getElementById('bubbleIconMicOn');
+  const bubbleIconMicOff = document.getElementById('bubbleIconMicOff');
+  const bubbleIconCamOn = document.getElementById('bubbleIconCamOn');
+  const bubbleIconCamOff = document.getElementById('bubbleIconCamOff');
+  const bubbleRoomTag = document.getElementById('bubbleRoomTag');
+
+  // Fullscreen Video Call Stage Overlay Elements
+  const videoCallModal = document.getElementById('videoCallModal');
+  const modalRoomBadge = document.getElementById('modalRoomBadge');
+  const btnMinimizeToBubble = document.getElementById('btnMinimizeToBubble');
+  const btnModalEndCall = document.getElementById('btnModalEndCall');
+  const modalRemoteVideo = document.getElementById('modalRemoteVideo');
+  const modalLocalVideo = document.getElementById('modalLocalVideo');
+  const modalWaitingState = document.getElementById('modalWaitingState');
+  const modalLocalPipWrap = document.getElementById('modalLocalPipWrap');
+  const btnModalToggleAudio = document.getElementById('btnModalToggleAudio');
+  const btnModalToggleVideo = document.getElementById('btnModalToggleVideo');
+  const btnModalFlipCamera = document.getElementById('btnModalFlipCamera');
+  const btnModalMinimizeBottom = document.getElementById('btnModalMinimizeBottom');
+  const btnModalHangup = document.getElementById('btnModalHangup');
+  const modalIconAudioOn = document.getElementById('modalIconAudioOn');
+  const modalIconAudioOff = document.getElementById('modalIconAudioOff');
+  const modalIconVideoOn = document.getElementById('modalIconVideoOn');
+  const modalIconVideoOff = document.getElementById('modalIconVideoOff');
+
   // Replying Elements
   const replyingBanner = document.getElementById('replyingBanner');
   const replyAuthor = document.getElementById('replyAuthor');
@@ -105,6 +140,23 @@
   let activeChatPeers = [];
   let activeVideoPeers = [];
   let sessionMessages = [];
+
+  // Integrated WebRTC Call State
+  let localStream = null;
+  let remoteStream = null;
+  let peerConnection = null;
+  let isVideoCallActive = false;
+  let isAudioMuted = false;
+  let isVideoMuted = false;
+  let facingMode = 'user';
+  let pendingIceCandidates = [];
+  const rtcConfig = {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' }
+    ]
+  };
 
   const saveActiveSession = (room, name, pass) => {
     try {
@@ -731,18 +783,428 @@
   if (btnClosePeers) btnClosePeers.addEventListener('click', closePeersModal);
   if (peersBackdrop) peersBackdrop.addEventListener('click', closePeersModal);
 
-  // Video Call Launch Trigger (/video)
+
+  // ==========================================================================
+  // INTEGRATED WEBRTC ENGINE & TOUCH/DRAGGABLE FLOATING VIDEO BUBBLE
+  // ==========================================================================
+
+  const startMedia = async () => {
+    if (localStream) {
+      localStream.getTracks().forEach(t => t.stop());
+      localStream = null;
+    }
+
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    try {
+      const videoConstraints = isMobile
+        ? { facingMode: facingMode, width: { ideal: 1280, max: 1920 }, height: { ideal: 720, max: 1080 }, frameRate: { ideal: 30, min: 20 } }
+        : { width: { ideal: 1280, max: 1920 }, height: { ideal: 720, max: 1080 }, frameRate: { ideal: 30, min: 20 } };
+
+      localStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: { ideal: true },
+          noiseSuppression: { ideal: true },
+          autoGainControl: { ideal: true }
+        },
+        video: videoConstraints
+      });
+
+      if (modalLocalVideo) modalLocalVideo.srcObject = localStream;
+      if (bubbleLocalVideo) bubbleLocalVideo.srcObject = localStream;
+      return true;
+    } catch (err) {
+      console.error('Media capture error:', err);
+      showToast('⚠️ Camera or microphone access was blocked or not found.');
+      return false;
+    }
+  };
+
+  const createPeerConnection = () => {
+    if (peerConnection) {
+      try { peerConnection.close(); } catch (e) {}
+      peerConnection = null;
+    }
+
+    peerConnection = new RTCPeerConnection(rtcConfig);
+    remoteStream = new MediaStream();
+
+    if (modalRemoteVideo) modalRemoteVideo.srcObject = remoteStream;
+    if (bubbleRemoteVideo) bubbleRemoteVideo.srcObject = remoteStream;
+
+    if (localStream) {
+      localStream.getTracks().forEach(track => {
+        peerConnection.addTrack(track, localStream);
+      });
+    }
+
+    peerConnection.ontrack = (event) => {
+      if (event.track) {
+        if (!remoteStream.getTracks().find(t => t.id === event.track.id)) {
+          remoteStream.addTrack(event.track);
+        }
+        if (modalWaitingState) modalWaitingState.style.display = 'none';
+        if (bubbleWaiting) bubbleWaiting.style.display = 'none';
+
+        if (modalRemoteVideo && modalRemoteVideo.paused) modalRemoteVideo.play().catch(() => {});
+        if (bubbleRemoteVideo && bubbleRemoteVideo.paused) bubbleRemoteVideo.play().catch(() => {});
+      }
+    };
+
+    peerConnection.onicecandidate = (event) => {
+      if (event.candidate && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'webrtc_signal',
+          roomId: currentRoom,
+          signal: { candidate: event.candidate }
+        }));
+      }
+    };
+
+    peerConnection.oniceconnectionstatechange = () => {
+      if (peerConnection.iceConnectionState === 'connected' || peerConnection.iceConnectionState === 'completed') {
+        if (modalWaitingState) modalWaitingState.style.display = 'none';
+        if (bubbleWaiting) bubbleWaiting.style.display = 'none';
+        showToast('✓ Video & Audio Connected');
+      } else if (peerConnection.iceConnectionState === 'disconnected' || peerConnection.iceConnectionState === 'failed') {
+        clearRemotePeer('Peer disconnected');
+      }
+    };
+  };
+
+  const createAndSendOffer = async () => {
+    if (!peerConnection) createPeerConnection();
+    try {
+      const offer = await peerConnection.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true
+      });
+      await peerConnection.setLocalDescription(offer);
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'webrtc_signal',
+          roomId: currentRoom,
+          signal: { offer: offer }
+        }));
+      }
+    } catch (err) {
+      console.error('Create offer error:', err);
+    }
+  };
+
+  const clearRemotePeer = (msg = null) => {
+    if (remoteStream) {
+      remoteStream.getTracks().forEach(t => t.stop());
+      remoteStream = new MediaStream();
+      if (modalRemoteVideo) modalRemoteVideo.srcObject = remoteStream;
+      if (bubbleRemoteVideo) bubbleRemoteVideo.srcObject = remoteStream;
+    }
+    if (modalWaitingState) modalWaitingState.style.display = 'flex';
+    if (bubbleWaiting) bubbleWaiting.style.display = 'flex';
+    if (msg) showToast(msg);
+  };
+
+  const handleWebRtcSignal = async (signal) => {
+    if (!isVideoCallActive || !signal) return;
+
+    try {
+      if (signal.offer) {
+        if (!peerConnection) createPeerConnection();
+        if (peerConnection.signalingState !== 'stable') {
+          await Promise.all([
+            peerConnection.setLocalDescription({ type: 'rollback' }),
+            peerConnection.setRemoteDescription(new RTCSessionDescription(signal.offer))
+          ]);
+        } else {
+          await peerConnection.setRemoteDescription(new RTCSessionDescription(signal.offer));
+        }
+
+        while (pendingIceCandidates.length > 0) {
+          const cand = pendingIceCandidates.shift();
+          try { await peerConnection.addIceCandidate(new RTCIceCandidate(cand)); } catch (e) {}
+        }
+
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'webrtc_signal',
+            roomId: currentRoom,
+            signal: { answer: answer }
+          }));
+        }
+      } else if (signal.answer) {
+        if (peerConnection && peerConnection.signalingState === 'have-local-offer') {
+          await peerConnection.setRemoteDescription(new RTCSessionDescription(signal.answer));
+          while (pendingIceCandidates.length > 0) {
+            const cand = pendingIceCandidates.shift();
+            try { await peerConnection.addIceCandidate(new RTCIceCandidate(cand)); } catch (e) {}
+          }
+        }
+      } else if (signal.candidate) {
+        if (peerConnection && peerConnection.remoteDescription) {
+          try {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(signal.candidate));
+          } catch (e) {}
+        } else {
+          pendingIceCandidates.push(signal.candidate);
+        }
+      }
+    } catch (err) {
+      console.error('Signal handling error:', err);
+    }
+  };
+
+  const startVideoCall = async (asBubble = false) => {
+    if (!currentRoom) return;
+    const mediaOk = await startMedia();
+    if (!mediaOk) return;
+
+    isVideoCallActive = true;
+    createPeerConnection();
+
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'video_state',
+        roomId: currentRoom,
+        active: true
+      }));
+    }
+
+    if (modalRoomBadge) modalRoomBadge.textContent = currentRoom;
+    if (bubbleRoomTag) bubbleRoomTag.textContent = currentRoom;
+
+    if (asBubble) {
+      minimizeVideoToBubble();
+    } else {
+      maximizeVideo();
+    }
+
+    if (activeVideoPeers.length > 0) {
+      showToast('Calling connected peers in room...');
+      createAndSendOffer();
+    } else {
+      showToast('📞 Video active. Share room with friends to connect!');
+    }
+  };
+
+  const minimizeVideoToBubble = () => {
+    if (videoCallModal) videoCallModal.style.display = 'none';
+    if (floatingVideoBubble) {
+      floatingVideoBubble.style.display = 'flex';
+      if (!floatingVideoBubble.style.top || floatingVideoBubble.style.top === 'auto') {
+        floatingVideoBubble.style.bottom = '85px';
+        floatingVideoBubble.style.right = '20px';
+      }
+    }
+    showToast('💬 Video minimized to floating bubble. You can chat while watching!');
+  };
+
+  const maximizeVideo = () => {
+    if (floatingVideoBubble) floatingVideoBubble.style.display = 'none';
+    if (videoCallModal) videoCallModal.style.display = 'flex';
+  };
+
+  const endVideoCall = () => {
+    if (localStream) {
+      localStream.getTracks().forEach(t => t.stop());
+      localStream = null;
+    }
+    clearRemotePeer();
+    if (peerConnection) {
+      try { peerConnection.close(); } catch (e) {}
+      peerConnection = null;
+    }
+
+    isVideoCallActive = false;
+
+    if (videoCallModal) videoCallModal.style.display = 'none';
+    if (floatingVideoBubble) floatingVideoBubble.style.display = 'none';
+
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'video_state',
+        roomId: currentRoom,
+        active: false
+      }));
+    }
+
+    showToast('Video call disconnected');
+  };
+
+  const toggleAudio = () => {
+    if (!localStream) return;
+    isAudioMuted = !isAudioMuted;
+    localStream.getAudioTracks().forEach(t => t.enabled = !isAudioMuted);
+
+    if (bubbleIconMicOn) bubbleIconMicOn.style.display = isAudioMuted ? 'none' : 'block';
+    if (bubbleIconMicOff) bubbleIconMicOff.style.display = isAudioMuted ? 'block' : 'none';
+    if (modalIconAudioOn) modalIconAudioOn.style.display = isAudioMuted ? 'none' : 'block';
+    if (modalIconAudioOff) modalIconAudioOff.style.display = isAudioMuted ? 'block' : 'none';
+    if (btnModalToggleAudio) btnModalToggleAudio.classList.toggle('off', isAudioMuted);
+
+    showToast(isAudioMuted ? '🔇 Microphone Muted' : '🔊 Microphone Active');
+  };
+
+  const toggleVideo = () => {
+    if (!localStream) return;
+    isVideoMuted = !isVideoMuted;
+    localStream.getVideoTracks().forEach(t => t.enabled = !isVideoMuted);
+
+    if (bubbleIconCamOn) bubbleIconCamOn.style.display = isVideoMuted ? 'none' : 'block';
+    if (bubbleIconCamOff) bubbleIconCamOff.style.display = isVideoMuted ? 'block' : 'none';
+    if (modalIconVideoOn) modalIconVideoOn.style.display = isVideoMuted ? 'none' : 'block';
+    if (modalIconVideoOff) modalIconVideoOff.style.display = isVideoMuted ? 'block' : 'none';
+    if (btnModalToggleVideo) btnModalToggleVideo.classList.toggle('off', isVideoMuted);
+
+    showToast(isVideoMuted ? '📷 Camera Off' : '📷 Camera On');
+  };
+
+  const flipCamera = async () => {
+    facingMode = (facingMode === 'user') ? 'environment' : 'user';
+    await startMedia();
+    if (peerConnection && localStream) {
+      const videoTrack = localStream.getVideoTracks()[0];
+      const sender = peerConnection.getSenders().find(s => s.track && s.track.kind === 'video');
+      if (sender && videoTrack) {
+        sender.replaceTrack(videoTrack);
+      }
+    }
+    showToast('📷 Camera flipped');
+  };
+
+  // Touch & Mouse Draggable Bubble Engine (Supports anywhere on screen)
+  const initBubbleDragging = (bubbleEl, handleEl) => {
+    if (!bubbleEl || !handleEl) return;
+
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let startLeft = 0;
+    let startTop = 0;
+
+    const onPointerDown = (clientX, clientY, target) => {
+      if (target.closest('button')) return;
+      const rect = bubbleEl.getBoundingClientRect();
+      startX = clientX;
+      startY = clientY;
+      startLeft = rect.left;
+      startTop = rect.top;
+      isDragging = true;
+      bubbleEl.classList.add('is-dragging');
+    };
+
+    const onPointerMove = (clientX, clientY, e) => {
+      if (!isDragging) return;
+      const dx = clientX - startX;
+      const dy = clientY - startY;
+
+      if (e && e.cancelable) e.preventDefault();
+
+      const bubbleWidth = bubbleEl.offsetWidth || 175;
+      const bubbleHeight = bubbleEl.offsetHeight || 240;
+
+      let newLeft = startLeft + dx;
+      let newTop = startTop + dy;
+
+      newLeft = Math.max(10, Math.min(window.innerWidth - bubbleWidth - 10, newLeft));
+      newTop = Math.max(10, Math.min(window.innerHeight - bubbleHeight - 10, newTop));
+
+      bubbleEl.style.left = `${newLeft}px`;
+      bubbleEl.style.top = `${newTop}px`;
+      bubbleEl.style.bottom = 'auto';
+      bubbleEl.style.right = 'auto';
+    };
+
+    const onPointerUp = () => {
+      if (!isDragging) return;
+      isDragging = false;
+      bubbleEl.classList.remove('is-dragging');
+    };
+
+    // Mobile & Tablet Touch
+    handleEl.addEventListener('touchstart', (e) => {
+      if (e.touches && e.touches[0]) {
+        onPointerDown(e.touches[0].clientX, e.touches[0].clientY, e.target);
+      }
+    }, { passive: false });
+
+    window.addEventListener('touchmove', (e) => {
+      if (isDragging && e.touches && e.touches[0]) {
+        onPointerMove(e.touches[0].clientX, e.touches[0].clientY, e);
+      }
+    }, { passive: false });
+
+    window.addEventListener('touchend', onPointerUp);
+
+    // Desktop Mouse
+    handleEl.addEventListener('mousedown', (e) => {
+      onPointerDown(e.clientX, e.clientY, e.target);
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (isDragging) {
+        onPointerMove(e.clientX, e.clientY, e);
+      }
+    });
+
+    window.addEventListener('mouseup', onPointerUp);
+  };
+
+
+  // Wire up Video Controls & Floating Bubble Triggers
   if (btnOpenVideo) {
     btnOpenVideo.addEventListener('click', () => {
-      saveActiveSession(currentRoom, codename, passphraseInput.value);
-      saveMessagesToSession();
-      const roomParam = encodeURIComponent(currentRoom || '');
-      const codeParam = encodeURIComponent(codename || '');
-      const keyParam = encodeURIComponent(passphraseInput.value || '');
-      const videoUrl = `/video#room=${roomParam}&codename=${codeParam}&key=${keyParam}`;
-      window.open(videoUrl, '_blank');
+      if (isVideoCallActive) {
+        maximizeVideo();
+      } else {
+        startVideoCall(false);
+      }
     });
   }
+
+  // Floating Bubble Controls
+  if (btnBubbleClose) {
+    btnBubbleClose.addEventListener('click', (e) => {
+      e.stopPropagation();
+      endVideoCall();
+    });
+  }
+
+  if (btnBubbleExpand) {
+    btnBubbleExpand.addEventListener('click', (e) => {
+      e.stopPropagation();
+      maximizeVideo();
+    });
+  }
+
+  const bubbleVideoWrap = document.getElementById('bubbleVideoWrap');
+  if (bubbleVideoWrap) {
+    bubbleVideoWrap.addEventListener('click', () => {
+      maximizeVideo();
+    });
+  }
+
+  if (btnBubbleMuteAudio) btnBubbleMuteAudio.addEventListener('click', toggleAudio);
+  if (btnBubbleToggleVideo) btnBubbleToggleVideo.addEventListener('click', toggleVideo);
+
+  // Fullscreen Modal Controls
+  if (btnMinimizeToBubble) btnMinimizeToBubble.addEventListener('click', minimizeVideoToBubble);
+  if (btnModalMinimizeBottom) btnModalMinimizeBottom.addEventListener('click', minimizeVideoToBubble);
+  if (btnModalEndCall) btnModalEndCall.addEventListener('click', endVideoCall);
+  if (btnModalHangup) btnModalHangup.addEventListener('click', endVideoCall);
+  if (btnModalToggleAudio) btnModalToggleAudio.addEventListener('click', toggleAudio);
+  if (btnModalToggleVideo) btnModalToggleVideo.addEventListener('click', toggleVideo);
+  if (btnModalFlipCamera) btnModalFlipCamera.addEventListener('click', flipCamera);
+
+  if (modalLocalPipWrap) {
+    modalLocalPipWrap.addEventListener('click', () => {
+      modalLocalPipWrap.classList.toggle('pip-expanded');
+    });
+  }
+
+  // Initialize Draggable Bubble
+  initBubbleDragging(floatingVideoBubble, bubbleDragHandle);
+
 
   // Reply Helpers
   const startReplyingTo = ({ sender, text }) => {
@@ -947,6 +1409,13 @@
 
           case 'encrypted_message': {
             await handleIncomingEncryptedMessage(msg.payload);
+            break;
+          }
+
+          case 'webrtc_signal': {
+            if (msg.signal) {
+              await handleWebRtcSignal(msg.signal);
+            }
             break;
           }
 
@@ -1301,6 +1770,7 @@
 
     clearActiveSession();
     sessionMessages = [];
+    if (isVideoCallActive) endVideoCall();
 
     // Zero out cryptographic keys and active buffers in RAM
     window.stealthCrypto.destroy();

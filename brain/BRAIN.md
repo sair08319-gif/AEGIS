@@ -80,6 +80,17 @@ All 8 identified flaws and architectural gaps have been resolved:
 * **File:** `public/app.js`
 * **Fix Applied:** Chaff packets now use identical ID formatting (`pkt-...`) and identical outer JSON keys as real messages without leaking `burnSeconds` or identifiable prefixes.
 
+### 9. Draggable Floating Video Bubble & In-App WebRTC (Added ✅)
+* **Files:** `public/app.js`, `public/index.html`, `public/style.css`, `server.js`
+* **Feature Implemented:**
+  - Integrated the WebRTC audio/video call engine directly into the main chatroom.
+  - When returning to chat or clicking **"Chat Bubble"**, the video collapses into a **Floating Touch/Mouse Draggable Bubble** in the corner of the chat.
+  - Users can drag the bubble anywhere on screen with touch on mobile/tablets or mouse on desktop (constrained within screen bounds).
+  - One-click **'✕'** button on the bubble immediately disconnects the call.
+  - One-click expand button (or tapping the bubble) restores the fullscreen video view.
+  - Quick mic/cam toggles available right from the floating bubble.
+  - Simultaneous encrypted text chatting and live video/voice calling without dropping connection.
+
 ### 8. Cloudflare Tunnel / Reverse Proxy Compatibility (Fixed ✅)
 * **File:** `server.js`
 * **Fix Applied:** Inspects `cf-connecting-ip` and `x-forwarded-for` headers, and expands localhost connection limits to prevent tunnel lockouts.

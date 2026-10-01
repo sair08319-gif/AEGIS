@@ -106,9 +106,10 @@ function getRoomPresence(roomId) {
   const videoPeers = new Set();
   for (const client of set) {
     if (client.peerId) {
-      if (client.clientType === 'video') {
+      if (client.clientType === 'video' || client.hasVideo) {
         videoPeers.add(client.peerId);
-      } else {
+      }
+      if (client.clientType === 'chat' || !client.clientType) {
         chatPeers.add(client.peerId);
       }
     }
@@ -228,6 +229,7 @@ wss.on('connection', (ws, req) => {
             : 'anon-' + Math.random().toString(36).substring(2, 7);
           ws.peerId = peerId;
           ws.clientType = (data.clientType === 'video') ? 'video' : 'chat';
+          ws.hasVideo = (data.hasVideo === true);
 
           if (!rooms.has(currentRoom)) {
             rooms.set(currentRoom, new Set());
@@ -241,6 +243,26 @@ wss.on('connection', (ws, req) => {
             event: 'join',
             peerId,
             clientType: ws.clientType,
+            chatPeers: presence.chatPeers,
+            videoPeers: presence.videoPeers,
+            chatCount: presence.chatCount,
+            videoCount: presence.videoCount,
+            peerCount: presence.chatCount,
+            peers: presence.chatPeers
+          });
+          break;
+        }
+
+        case 'video_state': {
+          if (!currentRoom || !rooms.has(currentRoom)) return;
+          ws.hasVideo = (data.active === true);
+          const presence = getRoomPresence(currentRoom);
+          broadcastToRoom(currentRoom, {
+            type: 'presence',
+            event: 'update',
+            peerId,
+            clientType: ws.clientType,
+            hasVideo: ws.hasVideo,
             chatPeers: presence.chatPeers,
             videoPeers: presence.videoPeers,
             chatCount: presence.chatCount,
@@ -267,12 +289,22 @@ wss.on('connection', (ws, req) => {
         case 'webrtc_signal': {
           const targetRoom = currentRoom || (typeof data.roomId === 'string' ? data.roomId.trim() : null);
           if (!targetRoom || !rooms.has(targetRoom)) return;
-          // Relay WebRTC signals ONLY to peers in video mode!
-          broadcastToRoom(targetRoom, {
-            type: 'webrtc_signal',
-            signal: data.signal,
-            sender: peerId
-          }, ws, 'video'); // Skip sender and target video clients only
+          // Relay WebRTC signals to peers who are in video or have video enabled
+          const roomSet = rooms.get(targetRoom);
+          if (roomSet) {
+            const serialized = JSON.stringify({
+              type: 'webrtc_signal',
+              signal: data.signal,
+              sender: peerId
+            });
+            for (const client of roomSet) {
+              if (client !== ws && client.readyState === client.OPEN) {
+                if (client.clientType === 'video' || client.hasVideo) {
+                  client.send(serialized);
+                }
+              }
+            }
+          }
           break;
         }
 
