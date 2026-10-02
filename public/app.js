@@ -930,8 +930,12 @@
 
     const startMedia = async () => {
     if (localStream) {
-      localStream.getTracks().forEach(t => t.stop());
+      localStream.getTracks().forEach(t => {
+        try { t.stop(); } catch(e) {}
+      });
       localStream = null;
+      // Windows Media Foundation hardware release delay (prevents NotReadableError)
+      await new Promise(r => setTimeout(r, 300));
     }
 
     const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -2069,17 +2073,8 @@
       } catch (e) {}
     }
 
-    // 2. Read from sessionStorage if not in hash
-    if (!room || !pass) {
-      try {
-        const saved = JSON.parse(sessionStorage.getItem('aegis_session') || '{}');
-        if (saved.room && saved.passphrase) {
-          room = saved.room;
-          pass = saved.passphrase;
-          if (!name) name = saved.codename;
-        }
-      } catch (e) {}
-    }
+    // 2. Do not restore unverified credentials from sessionStorage
+    // Room and passphrase must be explicitly entered or provided in secret URL fragment
 
     if (room && pass) {
       roomInput.value = room;
