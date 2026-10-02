@@ -147,19 +147,42 @@
   // Integrated WebRTC Call State
   let localStream = null;
   let remoteStream = null;
+  let screenStream = null;
   let peerConnection = null;
   let isVideoCallActive = false;
+  let isScreenSharing = false;
+  let isIpCloaked = false; // false = Direct P2P, true = Force TURN Relay
   let isAudioMuted = false;
   let isVideoMuted = false;
   let facingMode = 'user';
   let pendingIceCandidates = [];
-  const rtcConfig = {
-    iceServers: [
+  // Dynamic ICE Configuration with Turn Relay & Anti-IP-Leak Protection
+  const getRtcConfig = () => {
+    const stunServers = [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' }
-    ]
+      { urls: 'stun:stun.cloudflare.com:3478' }
+    ];
+
+    const turnRelays = [
+      {
+        urls: [
+          'turn:openrelay.metered.ca:80',
+          'turn:openrelay.metered.ca:443',
+          'turn:openrelay.metered.ca:443?transport=tcp'
+        ],
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      }
+    ];
+
+    return {
+      iceServers: isIpCloaked ? [...stunServers, ...turnRelays] : stunServers,
+      iceTransportPolicy: isIpCloaked ? 'relay' : 'all' // When 'relay', refuses direct P2P, hiding caller IP!
+    };
   };
+
+  const rtcConfig = getRtcConfig();
 
   const saveActiveSession = (room, name, pass) => {
     // SECURITY HARDENING: Plaintext passphrases and decrypted messages are kept EXCLUSIVELY in memory closure.
@@ -711,7 +734,39 @@
     });
   });
 
-  // Active Peers List Trigger
+  // IP Cloaking / Relay Management
+  const btnIpCloakToggle = document.getElementById('btnIpCloakToggle');
+  const ipCloakBadge = document.getElementById('ipCloakBadge');
+
+  const toggleIpCloaking = () => {
+    isIpCloaked = !isIpCloaked;
+    if (ipCloakBadge) {
+      ipCloakBadge.textContent = isIpCloaked ? 'CLOAKED' : 'P2P';
+      if (isIpCloaked) {
+        ipCloakBadge.classList.add('cloaked');
+      } else {
+        ipCloakBadge.classList.remove('cloaked');
+      }
+    }
+    if (btnIpCloakToggle) {
+      btnIpCloakToggle.dataset.tooltip = isIpCloaked
+        ? 'IP Cloaking: ON (Traffic routed through TURN relay, home IP hidden)'
+        : 'IP Cloaking: OFF (P2P direct connection, lower latency)';
+    }
+    showToast(isIpCloaked
+      ? '🛡️ IP Cloaking Active: P2P disabled, all media relayed via TURN'
+      : '⚡ Direct P2P Mode Active (Lowest latency)');
+
+    // If already in a call, offer to renegotiate
+    if (isVideoCallActive && peerConnection) {
+      showToast('🔄 Reconnecting video call with new relay profile...');
+      createAndSendOffer();
+    }
+  };
+
+  if (btnIpCloakToggle) btnIpCloakToggle.addEventListener('click', toggleIpCloaking);
+
+    // Active Peers List Trigger
   if (btnActivePeers) {
     btnActivePeers.addEventListener('click', () => {
       if (!peersModal || !peersListContainer) return;
@@ -786,7 +841,95 @@
   // INTEGRATED WEBRTC ENGINE & TOUCH/DRAGGABLE FLOATING VIDEO BUBBLE
   // ==========================================================================
 
-  const startMedia = async () => {
+  // Screen Sharing Management
+  const btnModalShareScreen = document.getElementById('btnModalShareScreen');
+  const modalIconScreenOn = document.getElementById('modalIconScreenOn');
+  const modalIconScreenOff = document.getElementById('modalIconScreenOff');
+  const screenSharingBanner = document.getElementById('screenSharingBanner');
+  const btnStopScreenShareBadge = document.getElementById('btnStopScreenShareBadge');
+
+  const toggleScreenSharing = async () => {
+    if (!isVideoCallActive || !peerConnection) {
+      showToast('⚠️ Please join a video call first to share your screen.');
+      return;
+    }
+
+    if (isScreenSharing) {
+      await stopScreenSharing();
+      return;
+    }
+
+    try {
+      screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: { cursor: 'always' },
+        audio: false
+      });
+
+      const screenTrack = screenStream.getVideoTracks()[0];
+      if (!screenTrack) return;
+
+      isScreenSharing = true;
+      if (btnModalShareScreen) btnModalShareScreen.classList.add('active-screen');
+      if (screenSharingBanner) screenSharingBanner.style.display = 'flex';
+      if (modalIconScreenOn) modalIconScreenOn.style.display = 'none';
+      if (modalIconScreenOff) modalIconScreenOff.style.display = 'inline';
+
+      // Hot-swap video track on peerConnection
+      const senders = peerConnection.getSenders();
+      const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+      if (videoSender) {
+        await videoSender.replaceTrack(screenTrack);
+      }
+
+      // Update local self-view
+      if (modalLocalVideo) modalLocalVideo.srcObject = screenStream;
+      if (bubbleLocalVideo) bubbleLocalVideo.srcObject = screenStream;
+
+      showToast('🖥️ Screen sharing is live!');
+
+      // Auto-revert when user stops sharing via native browser dialog
+      screenTrack.onended = () => {
+        stopScreenSharing();
+      };
+    } catch (err) {
+      console.warn('Screen share cancelled:', err);
+      isScreenSharing = false;
+    }
+  };
+
+  const stopScreenSharing = async () => {
+    if (!isScreenSharing && !screenStream) return;
+    isScreenSharing = false;
+
+    if (screenStream) {
+      screenStream.getTracks().forEach(t => t.stop());
+      screenStream = null;
+    }
+
+    if (btnModalShareScreen) btnModalShareScreen.classList.remove('active-screen');
+    if (screenSharingBanner) screenSharingBanner.style.display = 'none';
+    if (modalIconScreenOn) modalIconScreenOn.style.display = 'inline';
+    if (modalIconScreenOff) modalIconScreenOff.style.display = 'none';
+
+    // Revert video sender back to camera track
+    if (localStream && peerConnection) {
+      const cameraTrack = localStream.getVideoTracks()[0];
+      const senders = peerConnection.getSenders();
+      const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+      if (videoSender && cameraTrack) {
+        await videoSender.replaceTrack(cameraTrack);
+      }
+      if (modalLocalVideo) modalLocalVideo.srcObject = localStream;
+      if (bubbleLocalVideo) bubbleLocalVideo.srcObject = localStream;
+    }
+
+    showToast('Camera feed restored.');
+  };
+
+  if (btnModalShareScreen) btnModalShareScreen.addEventListener('click', toggleScreenSharing);
+  if (btnStopScreenShareBadge) btnStopScreenShareBadge.addEventListener('click', stopScreenSharing);
+
+    const startMedia = async () => {
     if (localStream) {
       localStream.getTracks().forEach(t => t.stop());
       localStream = null;
@@ -840,7 +983,7 @@
       peerConnection = null;
     }
 
-    peerConnection = new RTCPeerConnection(rtcConfig);
+    peerConnection = new RTCPeerConnection(getRtcConfig());
     remoteStream = new MediaStream();
 
     if (modalRemoteVideo) modalRemoteVideo.srcObject = remoteStream;
@@ -1508,6 +1651,18 @@
       // 2. Decrypt locally with AES-256 + verify HMAC
       const data = await window.stealthCrypto.decrypt(payload);
 
+      // Intercept Encrypted Whiteboard Strokes & Clear commands
+      if (data && data.whiteboardData && Array.isArray(data.strokes)) {
+        if (!wbCtx) initWhiteboard();
+        renderRemoteWhiteboardStrokes(data.strokes);
+        return;
+      }
+      if (data && data.whiteboardClear) {
+        clearLocalWhiteboard(false);
+        showToast('Peer cleared the whiteboard.');
+        return;
+      }
+
       // Intercept Encrypted Presence Announcement
       if (data && data.presenceAnnouncement) {
         if (data.ephemeralPeerId && data.codename) {
@@ -1828,6 +1983,9 @@
     peerCodenames.clear();
     clearActiveSession();
     sessionMessages = [];
+    if (isScreenSharing) stopScreenSharing();
+    clearLocalWhiteboard(false);
+    if (whiteboardModal) whiteboardModal.style.display = 'none';
     if (isVideoCallActive) endVideoCall();
 
     // Zero out cryptographic keys and active buffers in RAM
@@ -1938,7 +2096,202 @@
     screenLobby.style.display = 'flex';
   });
 
-  // Hotkey Navigation & Safe Panic Trigger
+  // ==========================================================================
+  // ENCRYPTED EPHEMERAL WHITEBOARD & SCRATCHPAD
+  // ==========================================================================
+  const btnOpenWhiteboard = document.getElementById('btnOpenWhiteboard');
+  const whiteboardModal = document.getElementById('whiteboardModal');
+  const whiteboardBackdrop = document.getElementById('whiteboardBackdrop');
+  const btnCloseWhiteboard = document.getElementById('btnCloseWhiteboard');
+  const btnClearWhiteboard = document.getElementById('btnClearWhiteboard');
+  const whiteboardCanvas = document.getElementById('whiteboardCanvas');
+  let wbCtx = null;
+  let isWbDrawing = false;
+  let wbCurrentColor = '#ffffff';
+  let wbCurrentSize = 2;
+  let lastWbX = 0;
+  let lastWbY = 0;
+  let pendingWbStrokes = [];
+  let wbFlushTimeout = null;
+
+  const initWhiteboard = () => {
+    if (!whiteboardCanvas) return;
+    wbCtx = whiteboardCanvas.getContext('2d');
+    wbCtx.lineCap = 'round';
+    wbCtx.lineJoin = 'round';
+
+    // Resize canvas resolution to match client display
+    const rect = whiteboardCanvas.getBoundingClientRect();
+    if (rect.width && rect.height) {
+      whiteboardCanvas.width = rect.width;
+      whiteboardCanvas.height = rect.height;
+    }
+
+    const getCoordinates = (e) => {
+      const r = whiteboardCanvas.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      return {
+        x: Math.round(clientX - r.left),
+        y: Math.round(clientY - r.top)
+      };
+    };
+
+    const startDraw = (e) => {
+      isWbDrawing = true;
+      const coords = getCoordinates(e);
+      lastWbX = coords.x;
+      lastWbY = coords.y;
+    };
+
+    const draw = (e) => {
+      if (!isWbDrawing || !wbCtx) return;
+      e.preventDefault();
+      const coords = getCoordinates(e);
+
+      // Local draw
+      wbCtx.strokeStyle = wbCurrentColor;
+      wbCtx.lineWidth = wbCurrentSize;
+      wbCtx.beginPath();
+      wbCtx.moveTo(lastWbX, lastWbY);
+      wbCtx.lineTo(coords.x, coords.y);
+      wbCtx.stroke();
+
+      // Buffer stroke for encrypted batch sync
+      pendingWbStrokes.push({
+        fromX: lastWbX,
+        fromY: lastWbY,
+        toX: coords.x,
+        toY: coords.y,
+        color: wbCurrentColor,
+        size: wbCurrentSize
+      });
+
+      lastWbX = coords.x;
+      lastWbY = coords.y;
+
+      if (!wbFlushTimeout) {
+        wbFlushTimeout = setTimeout(flushWhiteboardStrokes, 40);
+      }
+    };
+
+    const stopDraw = () => {
+      if (isWbDrawing) {
+        isWbDrawing = false;
+        flushWhiteboardStrokes();
+      }
+    };
+
+    whiteboardCanvas.addEventListener('mousedown', startDraw);
+    whiteboardCanvas.addEventListener('mousemove', draw);
+    window.addEventListener('mouseup', stopDraw);
+
+    whiteboardCanvas.addEventListener('touchstart', startDraw, { passive: false });
+    whiteboardCanvas.addEventListener('touchmove', draw, { passive: false });
+    window.addEventListener('touchend', stopDraw);
+
+    // Color pickers
+    document.querySelectorAll('.wb-color-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.wb-color-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        wbCurrentColor = btn.dataset.color || '#ffffff';
+      });
+    });
+
+    // Size pickers
+    document.querySelectorAll('.wb-size-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.wb-size-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        wbCurrentSize = parseInt(btn.dataset.size, 10) || 2;
+      });
+    });
+  };
+
+  const flushWhiteboardStrokes = async () => {
+    if (wbFlushTimeout) {
+      clearTimeout(wbFlushTimeout);
+      wbFlushTimeout = null;
+    }
+    if (pendingWbStrokes.length === 0 || !window.stealthCrypto || !window.stealthCrypto.isInitialized) return;
+
+    try {
+      const batch = [...pendingWbStrokes];
+      pendingWbStrokes = [];
+      const enc = await window.stealthCrypto.encrypt({
+        whiteboardData: true,
+        strokes: batch
+      });
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'encrypted_message',
+          payload: enc
+        }));
+      }
+    } catch (e) {}
+  };
+
+  const renderRemoteWhiteboardStrokes = (strokes) => {
+    if (!wbCtx || !Array.isArray(strokes)) return;
+    strokes.forEach(s => {
+      wbCtx.strokeStyle = s.color || '#ffffff';
+      wbCtx.lineWidth = s.size || 2;
+      wbCtx.beginPath();
+      wbCtx.moveTo(s.fromX, s.fromY);
+      wbCtx.lineTo(s.toX, s.toY);
+      wbCtx.stroke();
+    });
+  };
+
+  const clearLocalWhiteboard = (broadcast = true) => {
+    if (wbCtx && whiteboardCanvas) {
+      wbCtx.clearRect(0, 0, whiteboardCanvas.width, whiteboardCanvas.height);
+    }
+    if (broadcast && window.stealthCrypto && window.stealthCrypto.isInitialized) {
+      (async () => {
+        try {
+          const enc = await window.stealthCrypto.encrypt({
+            whiteboardClear: true
+          });
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+              type: 'encrypted_message',
+              payload: enc
+            }));
+          }
+        } catch (e) {}
+      })();
+    }
+  };
+
+  if (btnOpenWhiteboard) {
+    btnOpenWhiteboard.addEventListener('click', () => {
+      if (whiteboardModal) whiteboardModal.style.display = 'flex';
+      initWhiteboard();
+    });
+  }
+
+  if (btnCloseWhiteboard) {
+    btnCloseWhiteboard.addEventListener('click', () => {
+      if (whiteboardModal) whiteboardModal.style.display = 'none';
+    });
+  }
+
+  if (whiteboardBackdrop) {
+    whiteboardBackdrop.addEventListener('click', () => {
+      if (whiteboardModal) whiteboardModal.style.display = 'none';
+    });
+  }
+
+  if (btnClearWhiteboard) {
+    btnClearWhiteboard.addEventListener('click', () => {
+      clearLocalWhiteboard(true);
+      showToast('Whiteboard cleared');
+    });
+  }
+
+    // Hotkey Navigation & Safe Panic Trigger
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       // 1. If Lightbox is open, ESC closes the lightbox WITHOUT triggering panic wipe
