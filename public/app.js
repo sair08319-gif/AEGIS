@@ -135,6 +135,9 @@
   // State
   let ws = null;
   let currentRoom = '';
+  let blindedRoomId = '';
+  let myEphemeralPeerId = '';
+  const peerCodenames = new Map();
   let codename = '';
   let activePeersList = [];
   let activeChatPeers = [];
@@ -159,23 +162,12 @@
   };
 
   const saveActiveSession = (room, name, pass) => {
-    try {
-      sessionStorage.setItem('aegis_session', JSON.stringify({
-        room: room,
-        codename: name,
-        passphrase: pass,
-        savedAt: Date.now()
-      }));
-    } catch (e) {}
+    // SECURITY HARDENING: Plaintext passphrases and decrypted messages are kept EXCLUSIVELY in memory closure.
+    // Zero disk serialization ensures no extension or crash-dump recovery can harvest keys.
   };
 
   const saveMessagesToSession = () => {
-    try {
-      const toSave = sessionMessages
-        .filter(m => !m.burnSeconds || m.burnSeconds === 0)
-        .slice(-50);
-      sessionStorage.setItem('aegis_session_msgs', JSON.stringify(toSave));
-    } catch (e) {}
+    // In-memory only: sessionMessages array holds active decrypted history in RAM
   };
 
   const clearActiveSession = () => {
@@ -473,6 +465,10 @@
     const params = new URLSearchParams(hash);
     if (params.get('room')) roomInput.value = params.get('room');
     if (params.get('key')) passphraseInput.value = params.get('key');
+    // Anti-Forensics: Immediately scrub room key and secrets from browser URL bar history
+    try {
+      window.history.replaceState(null, '', window.location.pathname || '/');
+    } catch (e) {}
   };
 
   const loadNetworkInfo = async () => {
@@ -735,11 +731,12 @@
       chatList.forEach(name => {
         const item = document.createElement('div');
         item.className = 'peer-item-card';
-        const isYou = (name === codename);
+        const isYou = (name === myEphemeralPeerId || name === codename);
+        const displayName = isYou ? codename : (peerCodenames.get(name) || name);
         item.innerHTML = `
           <div class="peer-name-wrap">
             <span style="font-size: 1.1rem;">👤</span>
-            <span style="font-weight: 600;">${escapeHtml(name)}</span>
+            <span style="font-weight: 600;">${escapeHtml(displayName)}</span>
           </div>
           ${isYou ? '<span class="peer-badge-you">YOU</span>' : '<span style="color: #34d399; font-size: 0.72rem; font-weight: 600;">● In Chat</span>'}
         `;
@@ -761,11 +758,12 @@
         activeVideoPeers.forEach(name => {
           const item = document.createElement('div');
           item.className = 'peer-item-card';
-          const isYou = (name === codename);
+          const isYou = (name === myEphemeralPeerId || name === codename);
+        const displayName = isYou ? codename : (peerCodenames.get(name) || name);
           item.innerHTML = `
             <div class="peer-name-wrap">
               <span style="font-size: 1.1rem;">🎥</span>
-              <span style="font-weight: 600;">${escapeHtml(name)}</span>
+              <span style="font-weight: 600;">${escapeHtml(displayName)}</span>
             </div>
             <span style="color: #06b6d4; font-size: 0.72rem; font-weight: 600;">${isYou ? 'YOU (In Call)' : '● In Call'}</span>
           `;
@@ -819,6 +817,23 @@
     }
   };
 
+  const sendEncryptedWebRtcSignal = async (signalData) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN || !window.stealthCrypto || !window.stealthCrypto.isInitialized) return;
+    try {
+      const enc = await window.stealthCrypto.encrypt({
+        signal: signalData,
+        senderPeerId: myEphemeralPeerId
+      });
+      ws.send(JSON.stringify({
+        type: 'webrtc_signal',
+        roomId: blindedRoomId || currentRoom,
+        payload: enc
+      }));
+    } catch (err) {
+      console.error('[SECURITY] WebRTC signal encryption failed:', err);
+    }
+  };
+
   const createPeerConnection = () => {
     if (peerConnection) {
       try { peerConnection.close(); } catch (e) {}
@@ -851,12 +866,8 @@
     };
 
     peerConnection.onicecandidate = (event) => {
-      if (event.candidate && ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
-          type: 'webrtc_signal',
-          roomId: currentRoom,
-          signal: { candidate: event.candidate }
-        }));
+      if (event.candidate) {
+        sendEncryptedWebRtcSignal({ candidate: event.candidate });
       }
     };
 
@@ -879,13 +890,7 @@
         offerToReceiveVideo: true
       });
       await peerConnection.setLocalDescription(offer);
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({
-          type: 'webrtc_signal',
-          roomId: currentRoom,
-          signal: { offer: offer }
-        }));
-      }
+      await sendEncryptedWebRtcSignal({ offer: offer });
     } catch (err) {
       console.error('Create offer error:', err);
     }
@@ -925,13 +930,7 @@
 
         const answer = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answer);
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({
-            type: 'webrtc_signal',
-            roomId: currentRoom,
-            signal: { answer: answer }
-          }));
-        }
+        await sendEncryptedWebRtcSignal({ answer: answer });
       } else if (signal.answer) {
         if (peerConnection && peerConnection.signalingState === 'have-local-offer') {
           await peerConnection.setRemoteDescription(new RTCSessionDescription(signal.answer));
@@ -1228,13 +1227,16 @@
   const enterRoom = async (roomId, passphrase, userCodename) => {
     currentRoom = roomId;
     codename = userCodename || generateCodename();
+    blindedRoomId = StealthCrypto.blindRoomId(roomId);
+    myEphemeralPeerId = 'anon-' + StealthCrypto.generateNoise(10);
+    peerCodenames.set(myEphemeralPeerId, codename);
 
     if (cryptoStatusLabel) cryptoStatusLabel.textContent = 'DERIVING KEY (PBKDF2)...';
 
     try {
       await window.stealthCrypto.initializeKey(passphrase, currentRoom);
 
-      connectRelay(currentRoom);
+      connectRelay(blindedRoomId);
 
       if (activeRoomLabel) activeRoomLabel.textContent = currentRoom;
 
@@ -1351,6 +1353,25 @@
     }
   };
 
+  // Cryptographic In-Room Presence: Announces codename to room peers only via encrypted channel
+  const sendEncryptedPresenceAnnouncement = async (isAck = false) => {
+    if (!window.stealthCrypto || !window.stealthCrypto.isInitialized || !ws || ws.readyState !== WebSocket.OPEN) return;
+    try {
+      const enc = await window.stealthCrypto.encrypt({
+        presenceAnnouncement: true,
+        isAck: isAck,
+        codename: codename,
+        ephemeralPeerId: myEphemeralPeerId,
+        clientType: 'chat',
+        hasVideo: isVideoCallActive
+      });
+      ws.send(JSON.stringify({
+        type: 'encrypted_message',
+        payload: enc
+      }));
+    } catch (e) {}
+  };
+
   // WebSocket Connection
   const connectRelay = (roomId) => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -1362,9 +1383,11 @@
       ws.send(JSON.stringify({
         type: 'join',
         roomId: roomId,
-        peerId: codename,
+        peerId: myEphemeralPeerId,
         clientType: 'chat'
       }));
+      // Announce encrypted presence to authenticated peers only
+      sendEncryptedPresenceAnnouncement(false);
     };
 
     ws.onmessage = async (evt) => {
@@ -1413,23 +1436,32 @@
           }
 
           case 'webrtc_signal': {
-            if (msg.signal) {
-              await handleWebRtcSignal(msg.signal);
+            if (msg.payload && window.stealthCrypto && window.stealthCrypto.isInitialized) {
+              try {
+                const decrypted = await window.stealthCrypto.decrypt(msg.payload);
+                if (decrypted && decrypted.signal) {
+                  await handleWebRtcSignal(decrypted.signal, decrypted.senderPeerId || msg.sender);
+                }
+              } catch (e) {
+                console.warn('[SECURITY] WebRTC signal dropped: Decryption or authentication failed.');
+              }
+            } else if (msg.signal) {
+              await handleWebRtcSignal(msg.signal, msg.sender);
             }
             break;
           }
 
           case 'room_wiped': {
             // Cryptographic Verification: Verify wipe packet was signed with the room's MAC key
-            if (window.stealthCrypto.activeMacKey && msg.authTag) {
+            if (window.stealthCrypto && window.stealthCrypto.activeMacKey && msg.authTag) {
               const expected = CryptoJS.HmacSHA256('WIPE_ROOM:' + currentRoom, window.stealthCrypto.activeMacKey).toString();
               if (StealthCrypto.timingSafeEqual(expected, msg.authTag)) {
                 triggerWipe(true);
               } else {
-                console.warn('[SECURITY] Unauthenticated room wipe rejected: invalid authTag');
+                console.warn('[SECURITY] Unauthenticated room wipe rejected: Invalid HMAC signature.');
               }
             } else {
-              triggerWipe(true);
+              console.warn('[SECURITY] Unauthenticated room wipe rejected: Missing HMAC authentication tag.');
             }
             break;
           }
@@ -1475,6 +1507,18 @@
     try {
       // 2. Decrypt locally with AES-256 + verify HMAC
       const data = await window.stealthCrypto.decrypt(payload);
+
+      // Intercept Encrypted Presence Announcement
+      if (data && data.presenceAnnouncement) {
+        if (data.ephemeralPeerId && data.codename) {
+          peerCodenames.set(data.ephemeralPeerId, data.codename);
+        }
+        if (!data.isAck) {
+          sendEncryptedPresenceAnnouncement(true);
+        }
+        if (renderActivePeersList) renderActivePeersList();
+        return;
+      }
 
       // If this is a Chaff / Dummy packet, absorb silently without rendering
       if (data && data.isDummy) {
@@ -1750,6 +1794,19 @@
     stopChaffGenerator();
     closePopover();
 
+    // 1. Wipe clipboard to prevent residual invite link theft
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText('');
+      }
+    } catch (e) {}
+
+    // 2. Clear all browser storage caches
+    try {
+      sessionStorage.clear();
+      localStorage.clear();
+    } catch (e) {}
+
     if (!isIncoming && ws && ws.readyState === WebSocket.OPEN) {
       try {
         const wipeTag = window.stealthCrypto.activeMacKey
@@ -1757,7 +1814,7 @@
           : 'unauthenticated';
         ws.send(JSON.stringify({ 
           type: 'wipe_room', 
-          roomId: currentRoom,
+          roomId: blindedRoomId || currentRoom,
           authTag: wipeTag
         }));
       } catch (e) {}
@@ -1768,6 +1825,7 @@
       ws = null;
     }
 
+    peerCodenames.clear();
     clearActiveSession();
     sessionMessages = [];
     if (isVideoCallActive) endVideoCall();
@@ -1814,13 +1872,16 @@
     let name = null;
     let pass = null;
 
-    // 1. Read URL hash parameters
+    // 1. Read URL hash parameters and immediately scrub them
     const hash = window.location.hash.substring(1);
     if (hash) {
       const p = new URLSearchParams(hash);
       room = p.get('room');
       pass = p.get('key');
       name = p.get('codename');
+      try {
+        window.history.replaceState(null, '', window.location.pathname || '/');
+      } catch (e) {}
     }
 
     // 2. Read from sessionStorage if not in hash

@@ -53,6 +53,12 @@ class StealthCrypto {
     return out;
   }
 
+  // Derive a one-way blinded Room ID so the relay server never learns the plaintext room name
+  static blindRoomId(roomId) {
+    if (!roomId) return 'blinded-default';
+    return CryptoJS.SHA256('aegis-blind-room-v1:' + roomId.trim().toLowerCase()).toString().substring(0, 32);
+  }
+
   /**
    * Derive 512 bits using PBKDF2 (30,000 rounds)
    * Enforces Cryptographic Key Separation:

@@ -45,9 +45,11 @@ const server = http.createServer((req, res) => {
   // Network info API for easy phone hotspot connection
   if (req.url === '/api/network-info') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
+    const remoteIp = req.socket.remoteAddress || '';
+    const isLoopback = remoteIp === '127.0.0.1' || remoteIp === '::1' || remoteIp === '::ffff:127.0.0.1';
     return res.end(JSON.stringify({
       port: PORT,
-      ips: getLocalIpAddresses(),
+      ips: isLoopback ? getLocalIpAddresses() : [],
       serverTime: Date.now()
     }));
   }
@@ -289,16 +291,17 @@ wss.on('connection', (ws, req) => {
         case 'webrtc_signal': {
           const targetRoom = currentRoom || (typeof data.roomId === 'string' ? data.roomId.trim() : null);
           if (!targetRoom || !rooms.has(targetRoom)) return;
-          // Relay WebRTC signals to peers who are in video or have video enabled
+          // Relay encrypted WebRTC signal payload to peers with video enabled
           const roomSet = rooms.get(targetRoom);
           if (roomSet) {
             const serialized = JSON.stringify({
               type: 'webrtc_signal',
-              signal: data.signal,
+              payload: data.payload, // Encrypted signal
+              signal: data.signal || null, // Fallback for legacy
               sender: peerId
             });
             for (const client of roomSet) {
-              if (client !== ws && client.readyState === client.OPEN) {
+              if (client !== ws && client.readyState === 1) { // WebSocket.OPEN
                 if (client.clientType === 'video' || client.hasVideo) {
                   client.send(serialized);
                 }
@@ -309,30 +312,27 @@ wss.on('connection', (ws, req) => {
         }
 
         case 'wipe_room': {
-          // SECURITY HARDENING: Require HMAC authentication tag proving knowledge of the room key!
           if (!currentRoom || !rooms.has(currentRoom)) return;
           if (!data.authTag || typeof data.authTag !== 'string') {
-            console.warn(`[SECURITY] Unauthenticated wipe attempt rejected for room: ${currentRoom}`);
+            console.warn('[SECURITY] Unauthenticated wipe attempt rejected for room: ' + currentRoom);
             return;
           }
+          // Relay wipe notification with cryptographic authTag to all peers in room
+          // Each client verifies the HMAC locally before wiping their local memory and closing
           const targetRoom = currentRoom;
           const peerSet = rooms.get(targetRoom);
           if (peerSet) {
+            const wipeNotice = JSON.stringify({
+              type: 'room_wiped',
+              roomId: targetRoom,
+              authTag: data.authTag
+            });
             for (const client of peerSet) {
-              try {
-                if (client.readyState === 1) { // WebSocket.OPEN
-                  client.send(JSON.stringify({ 
-                    type: 'room_wiped', 
-                    roomId: targetRoom,
-                    authTag: data.authTag 
-                  }));
-                  client.close(1000, 'Room destroyed');
-                }
-              } catch (e) {}
+              if (client !== ws && client.readyState === 1) { // WebSocket.OPEN
+                client.send(wipeNotice);
+              }
             }
-            rooms.delete(targetRoom);
           }
-          cleanup();
           break;
         }
 
