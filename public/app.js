@@ -953,28 +953,35 @@
     } catch (err1) {
       console.warn('Initial HD camera capture failed, attempting relaxed constraints:', err1);
 
-      // Stage 2: Relaxed video + audio
+      // Stage 2: Relaxed constraints — let browser pick any working config
       try {
+        // CRITICAL FIX: Explicitly stop any partial stream to release OS hardware lock
+        if (localStream) { localStream.getTracks().forEach(t => { try { t.stop(); } catch(e) {} }); localStream = null; }
+        // 300ms hardware-release delay for Windows/Driver NotReadableError (stage 2)
+        await new Promise(r => setTimeout(r, 300));
         localStream = await navigator.mediaDevices.getUserMedia({
           audio: true,
           video: true
         });
       } catch (err2) {
-        console.warn('Relaxed video+audio capture failed:', err2);
+        console.warn('Relaxed video+audio capture failed:', err2.name, err2.message);
 
-        // Stage 3: Camera locked by another program/tab or driver busy -> Fallback to Audio-Only
+        // Stage 3: Camera locked by OS/driver -> Audio-Only fallback
         try {
+          // CRITICAL FIX: Release again before final attempt
+          if (localStream) { localStream.getTracks().forEach(t => { try { t.stop(); } catch(e) {} }); localStream = null; }
+          await new Promise(r => setTimeout(r, 300));
           localStream = await navigator.mediaDevices.getUserMedia({
             audio: true,
             video: false
           });
-          showToast('⚠️ Camera locked by another app/tab. Connected in Audio-Only mode.');
+          showToast('⚠️ Camera unavailable. Audio-Only mode. Close Zoom/Teams and retry video.');
         } catch (err3) {
-          console.error('All media capture stages failed:', err3);
+          console.error('All media capture stages failed:', err3.name, err3.message);
           if (err1.name === 'NotReadableError' || err2.name === 'NotReadableError') {
-            showToast('⚠️ Camera source busy/locked. Close Zoom, Teams or other tabs and retry.');
+            showToast('⚠️ Camera hardware busy. Close all apps using camera and retry.');
           } else if (err1.name === 'NotAllowedError' || err2.name === 'NotAllowedError') {
-            showToast('⚠️ Camera/Mic permission blocked. Please allow access in browser bar.');
+            showToast('⚠️ Camera/Mic permission blocked. Allow access in browser settings.');
           } else {
             showToast('⚠️ No camera or microphone found on this device.');
           }
@@ -1407,7 +1414,9 @@
     if (cryptoStatusLabel) cryptoStatusLabel.textContent = 'DERIVING KEY (PBKDF2)...';
 
     try {
-      await window.stealthCrypto.initializeKey(passphrase, currentRoom);
+      // CRITICAL FIX: Use cleanPass + cleanRoom (both .trim()ed) so mobile/desktop
+      // keyboard quirks can never produce different PBKDF2 inputs => HMAC mismatch
+      await window.stealthCrypto.initializeKey(cleanPass, cleanRoom);
 
       connectRelay(blindedRoomId);
 
@@ -1477,7 +1486,7 @@
     const scheduleNext = () => {
       const delay = 4000 + Math.random() * 4000;
       chaffIntervalId = setTimeout(async () => {
-        if (ws && ws.readyState === WebSocket.OPEN && window.stealthCrypto.activeKey) {
+        if (ws && ws.readyState === WebSocket.OPEN && window.stealthCrypto.isInitialized) {
           try {
             // Create dummy heartbeat packet (padded to 2KB)
             const encryptedDummy = await window.stealthCrypto.encrypt({
