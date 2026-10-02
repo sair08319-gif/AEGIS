@@ -68,14 +68,16 @@ class StealthCrypto {
   async initializeKey(passphrase, roomId) {
     this.rawPassphrase = passphrase;
 
-    // Domain-separated deterministic room salt
-    const saltHash = CryptoJS.SHA256('aegis-salt-v3:' + (roomId || 'default'));
+    // Domain-separated deterministic room salt: Normalized to lower-case and trimmed
+    const normalizedRoom = String(roomId || 'default').trim().toLowerCase();
+    const saltHash = CryptoJS.SHA256('aegis-salt-v3:' + normalizedRoom);
     this.saltHex = saltHash.toString().substring(0, 32);
 
     const salt = CryptoJS.enc.Hex.parse(this.saltHex);
 
-    // Derive 512 bits (16 32-bit words)
-    const derived = CryptoJS.PBKDF2(passphrase, salt, {
+    // Derive 512 bits (16 32-bit words) with trimmed passphrase to eliminate mobile keyboard space issues
+    const cleanPass = String(passphrase || '').trim();
+    const derived = CryptoJS.PBKDF2(cleanPass, salt, {
       keySize: 512 / 32,
       iterations: 30000,
       hasher: CryptoJS.algo.SHA256

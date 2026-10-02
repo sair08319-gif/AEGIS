@@ -935,28 +935,53 @@
     }
 
     const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+    // Stage 1: Try optimal video + audio without overconstrained framerate limits
     try {
       const videoConstraints = isMobile
-        ? { facingMode: facingMode, width: { ideal: 1280, max: 1920 }, height: { ideal: 720, max: 1080 }, frameRate: { ideal: 30, min: 20 } }
-        : { width: { ideal: 1280, max: 1920 }, height: { ideal: 720, max: 1080 }, frameRate: { ideal: 30, min: 20 } };
+        ? { facingMode: facingMode, width: { ideal: 1280 }, height: { ideal: 720 } }
+        : { width: { ideal: 1280 }, height: { ideal: 720 } };
 
       localStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: { ideal: true },
-          noiseSuppression: { ideal: true },
-          autoGainControl: { ideal: true }
-        },
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
         video: videoConstraints
       });
+    } catch (err1) {
+      console.warn('Initial HD camera capture failed, attempting relaxed constraints:', err1);
 
-      if (modalLocalVideo) modalLocalVideo.srcObject = localStream;
-      if (bubbleLocalVideo) bubbleLocalVideo.srcObject = localStream;
-      return true;
-    } catch (err) {
-      console.error('Media capture error:', err);
-      showToast('⚠️ Camera or microphone access was blocked or not found.');
-      return false;
+      // Stage 2: Relaxed video + audio
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: true
+        });
+      } catch (err2) {
+        console.warn('Relaxed video+audio capture failed:', err2);
+
+        // Stage 3: Camera locked by another program/tab or driver busy -> Fallback to Audio-Only
+        try {
+          localStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: false
+          });
+          showToast('⚠️ Camera locked by another app/tab. Connected in Audio-Only mode.');
+        } catch (err3) {
+          console.error('All media capture stages failed:', err3);
+          if (err1.name === 'NotReadableError' || err2.name === 'NotReadableError') {
+            showToast('⚠️ Camera source busy/locked. Close Zoom, Teams or other tabs and retry.');
+          } else if (err1.name === 'NotAllowedError' || err2.name === 'NotAllowedError') {
+            showToast('⚠️ Camera/Mic permission blocked. Please allow access in browser bar.');
+          } else {
+            showToast('⚠️ No camera or microphone found on this device.');
+          }
+          return false;
+        }
+      }
     }
+
+    if (modalLocalVideo) modalLocalVideo.srcObject = localStream;
+    if (bubbleLocalVideo) bubbleLocalVideo.srcObject = localStream;
+    return true;
   };
 
   const sendEncryptedWebRtcSignal = async (signalData) => {
@@ -1367,9 +1392,11 @@
 
   // Core Room Initialization & Join Workflow
   const enterRoom = async (roomId, passphrase, userCodename) => {
-    currentRoom = roomId;
+    const cleanRoom = String(roomId || '').trim();
+    const cleanPass = String(passphrase || '').trim();
+    currentRoom = cleanRoom;
     codename = userCodename || generateCodename();
-    blindedRoomId = StealthCrypto.blindRoomId(roomId);
+    blindedRoomId = StealthCrypto.blindRoomId(cleanRoom);
     myEphemeralPeerId = 'anon-' + StealthCrypto.generateNoise(10);
     peerCodenames.set(myEphemeralPeerId, codename);
 
