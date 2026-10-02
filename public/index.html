@@ -80,9 +80,9 @@
           </button>
 
           <!-- IP Cloak / Relay Settings Button -->
-          <button type="button" id="btnIpCloakToggle" class="dock-btn" data-tooltip="IP Cloaking: Direct P2P (Click to toggle TURN Relay)" aria-label="IP Cloaking">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-            <span id="ipCloakBadge" class="dock-badge-text" style="font-size: 0.62rem; font-weight: 700;">P2P</span>
+          <button type="button" id="btnIpCloakToggle" class="dock-btn" data-tooltip="IP Privacy: Direct P2P (Click to mask IP via Relay)" aria-label="IP Privacy Mode">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <span id="ipCloakBadge" class="dock-badge-text" style="font-size: 0.62rem; font-weight: 800;">P2P</span>
           </button>
 
           <!-- Copy Invite Link Icon -->
@@ -371,10 +371,6 @@
     </div>
   </div>
 
-  <!-- Scripts -->
-  <script src="crypto-js.js"></script>
-  <script src="crypto.js"></script>
-  <script src="app.js"></script>
   <!-- Encrypted Ephemeral Whiteboard Modal -->
   <div id="whiteboardModal" class="whiteboard-modal" style="display: none;">
     <div class="whiteboard-backdrop" id="whiteboardBackdrop"></div>
@@ -410,6 +406,12 @@
       </div>
     </div>
   </div>
+
+  <!-- Scripts -->
+  <script src="crypto-js.js"></script>
+  <script src="crypto.js"></script>
+  <script src="app.js"></script>
+
 
 </body>
 </html>

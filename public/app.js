@@ -741,7 +741,7 @@
   const toggleIpCloaking = () => {
     isIpCloaked = !isIpCloaked;
     if (ipCloakBadge) {
-      ipCloakBadge.textContent = isIpCloaked ? 'CLOAKED' : 'P2P';
+      ipCloakBadge.textContent = isIpCloaked ? 'RELAY' : 'P2P';
       if (isIpCloaked) {
         ipCloakBadge.classList.add('cloaked');
       } else {
@@ -750,14 +750,13 @@
     }
     if (btnIpCloakToggle) {
       btnIpCloakToggle.dataset.tooltip = isIpCloaked
-        ? 'IP Cloaking: ON (Traffic routed through TURN relay, home IP hidden)'
-        : 'IP Cloaking: OFF (P2P direct connection, lower latency)';
+        ? 'IP Privacy: MASKED (Relayed through encrypted TURN proxy, home IP hidden)'
+        : 'IP Privacy: DIRECT (Direct P2P, lowest latency)';
     }
     showToast(isIpCloaked
-      ? '🛡️ IP Cloaking Active: P2P disabled, all media relayed via TURN'
-      : '⚡ Direct P2P Mode Active (Lowest latency)');
+      ? '🛡️ IP MASKED (TURN Relay ON): Your home IP is hidden from peers.'
+      : '⚡ DIRECT P2P (Relay OFF): Direct low-latency streaming.');
 
-    // If already in a call, offer to renegotiate
     if (isVideoCallActive && peerConnection) {
       showToast('🔄 Reconnecting video call with new relay profile...');
       createAndSendOffer();
@@ -1707,9 +1706,10 @@
         burnSeconds: Number(data.burnSeconds) || 0
       });
     } catch (err) {
+      console.warn('[SECURITY] Inbound packet decryption failed: HMAC mismatch or different room passphrase.');
       renderMessage({
-        sender: 'UNKNOWN / TAMPERED',
-        text: '⚠️ DECRYPTION FAILED: Cryptographic authentication tag mismatch. Message was either altered in transit or sent with a different passphrase.',
+        sender: 'SECURITY NOTICE',
+        text: '⚠️ Incoming message could not be decrypted. A peer in this room may have joined with a different secret passphrase.',
         timestamp: Date.now(),
         isOutgoing: false,
         isError: true,
@@ -2097,7 +2097,7 @@
   });
 
   // ==========================================================================
-  // ENCRYPTED EPHEMERAL WHITEBOARD & SCRATCHPAD
+  // ENCRYPTED EPHEMERAL WHITEBOARD & SCRATCHPAD (POINTER-DRIVEN & REAL-TIME)
   // ==========================================================================
   const btnOpenWhiteboard = document.getElementById('btnOpenWhiteboard');
   const whiteboardModal = document.getElementById('whiteboardModal');
@@ -2107,49 +2107,67 @@
   const whiteboardCanvas = document.getElementById('whiteboardCanvas');
   let wbCtx = null;
   let isWbDrawing = false;
-  let wbCurrentColor = '#ffffff';
-  let wbCurrentSize = 2;
+  let wbCurrentColor = '#10b981';
+  let wbCurrentSize = 3;
   let lastWbX = 0;
   let lastWbY = 0;
   let pendingWbStrokes = [];
   let wbFlushTimeout = null;
+  let isWbInitialized = false;
 
   const initWhiteboard = () => {
     if (!whiteboardCanvas) return;
-    wbCtx = whiteboardCanvas.getContext('2d');
+    if (!wbCtx) {
+      wbCtx = whiteboardCanvas.getContext('2d');
+    }
+
+    // Set fixed virtual canvas resolution (crisp HD scaling)
+    if (whiteboardCanvas.width !== 1200 || whiteboardCanvas.height !== 750) {
+      whiteboardCanvas.width = 1200;
+      whiteboardCanvas.height = 750;
+      wbCtx.fillStyle = '#070a10';
+      wbCtx.fillRect(0, 0, 1200, 750);
+    }
+
     wbCtx.lineCap = 'round';
     wbCtx.lineJoin = 'round';
 
-    // Resize canvas resolution to match client display
-    const rect = whiteboardCanvas.getBoundingClientRect();
-    if (rect.width && rect.height) {
-      whiteboardCanvas.width = rect.width;
-      whiteboardCanvas.height = rect.height;
-    }
+    if (isWbInitialized) return;
+    isWbInitialized = true;
 
-    const getCoordinates = (e) => {
-      const r = whiteboardCanvas.getBoundingClientRect();
-      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const getWbCoordinates = (e) => {
+      const rect = whiteboardCanvas.getBoundingClientRect();
+      const scaleX = whiteboardCanvas.width / (rect.width || 1);
+      const scaleY = whiteboardCanvas.height / (rect.height || 1);
       return {
-        x: Math.round(clientX - r.left),
-        y: Math.round(clientY - r.top)
+        x: Math.round((e.clientX - rect.left) * scaleX),
+        y: Math.round((e.clientY - rect.top) * scaleY)
       };
     };
 
     const startDraw = (e) => {
+      e.preventDefault();
       isWbDrawing = true;
-      const coords = getCoordinates(e);
+      try { whiteboardCanvas.setPointerCapture(e.pointerId); } catch(err) {}
+      const coords = getWbCoordinates(e);
       lastWbX = coords.x;
       lastWbY = coords.y;
+
+      // Draw initial point
+      wbCtx.strokeStyle = wbCurrentColor;
+      wbCtx.lineWidth = wbCurrentSize;
+      wbCtx.beginPath();
+      wbCtx.arc(coords.x, coords.y, wbCurrentSize / 2, 0, Math.PI * 2);
+      wbCtx.fillStyle = wbCurrentColor;
+      wbCtx.fill();
     };
 
     const draw = (e) => {
       if (!isWbDrawing || !wbCtx) return;
       e.preventDefault();
-      const coords = getCoordinates(e);
+      const coords = getWbCoordinates(e);
 
-      // Local draw
+      // Render local stroke
       wbCtx.strokeStyle = wbCurrentColor;
       wbCtx.lineWidth = wbCurrentSize;
       wbCtx.beginPath();
@@ -2171,31 +2189,30 @@
       lastWbY = coords.y;
 
       if (!wbFlushTimeout) {
-        wbFlushTimeout = setTimeout(flushWhiteboardStrokes, 40);
+        wbFlushTimeout = setTimeout(flushWhiteboardStrokes, 50);
       }
     };
 
-    const stopDraw = () => {
+    const stopDraw = (e) => {
       if (isWbDrawing) {
         isWbDrawing = false;
+        try { whiteboardCanvas.releasePointerCapture(e.pointerId); } catch(err) {}
         flushWhiteboardStrokes();
       }
     };
 
-    whiteboardCanvas.addEventListener('mousedown', startDraw);
-    whiteboardCanvas.addEventListener('mousemove', draw);
-    window.addEventListener('mouseup', stopDraw);
-
-    whiteboardCanvas.addEventListener('touchstart', startDraw, { passive: false });
-    whiteboardCanvas.addEventListener('touchmove', draw, { passive: false });
-    window.addEventListener('touchend', stopDraw);
+    // Modern Pointer Events (Unified Touch, Mouse, & Stylus)
+    whiteboardCanvas.addEventListener('pointerdown', startDraw);
+    whiteboardCanvas.addEventListener('pointermove', draw);
+    whiteboardCanvas.addEventListener('pointerup', stopDraw);
+    whiteboardCanvas.addEventListener('pointercancel', stopDraw);
 
     // Color pickers
     document.querySelectorAll('.wb-color-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.wb-color-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        wbCurrentColor = btn.dataset.color || '#ffffff';
+        wbCurrentColor = btn.dataset.color || '#10b981';
       });
     });
 
@@ -2204,7 +2221,7 @@
       btn.addEventListener('click', () => {
         document.querySelectorAll('.wb-size-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        wbCurrentSize = parseInt(btn.dataset.size, 10) || 2;
+        wbCurrentSize = parseInt(btn.dataset.size, 10) || 3;
       });
     });
   };
@@ -2233,10 +2250,12 @@
   };
 
   const renderRemoteWhiteboardStrokes = (strokes) => {
+    if (!wbCtx && whiteboardCanvas) initWhiteboard();
     if (!wbCtx || !Array.isArray(strokes)) return;
+
     strokes.forEach(s => {
-      wbCtx.strokeStyle = s.color || '#ffffff';
-      wbCtx.lineWidth = s.size || 2;
+      wbCtx.strokeStyle = s.color || '#10b981';
+      wbCtx.lineWidth = s.size || 3;
       wbCtx.beginPath();
       wbCtx.moveTo(s.fromX, s.fromY);
       wbCtx.lineTo(s.toX, s.toY);
@@ -2246,7 +2265,8 @@
 
   const clearLocalWhiteboard = (broadcast = true) => {
     if (wbCtx && whiteboardCanvas) {
-      wbCtx.clearRect(0, 0, whiteboardCanvas.width, whiteboardCanvas.height);
+      wbCtx.fillStyle = '#070a10';
+      wbCtx.fillRect(0, 0, whiteboardCanvas.width, whiteboardCanvas.height);
     }
     if (broadcast && window.stealthCrypto && window.stealthCrypto.isInitialized) {
       (async () => {
@@ -2287,11 +2307,12 @@
   if (btnClearWhiteboard) {
     btnClearWhiteboard.addEventListener('click', () => {
       clearLocalWhiteboard(true);
-      showToast('Whiteboard cleared');
+      showToast('Whiteboard canvas cleared');
     });
   }
 
-    // Hotkey Navigation & Safe Panic Trigger
+
+  // Hotkey Navigation & Safe Panic Trigger
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       // 1. If Lightbox is open, ESC closes the lightbox WITHOUT triggering panic wipe
