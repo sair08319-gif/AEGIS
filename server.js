@@ -44,7 +44,7 @@ const server = http.createServer((req, res) => {
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
   // Restrict connect-src to 'self' (prevents unauthorized external WebSocket exfiltration)
-  res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data: blob:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' ws: wss:; object-src 'none'; base-uri 'none'; form-action 'self';");
+  res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob: data: mediastream:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' ws: wss: https: stun: turn: turns: *.metered.ca *.google.com *.cloudflare.com; object-src 'none'; base-uri 'none'; form-action 'self';");
 
   // Network info API for easy phone hotspot connection
   if (req.url === '/api/network-info') {
@@ -142,7 +142,21 @@ function broadcastToRoom(roomId, messageObj, excludeWs = null, targetClientType 
   }
 }
 
+
+// Render / Reverse Proxy WebSocket Heartbeat (Prevents 55-second proxy disconnect)
+const heartbeatInterval = setInterval(() => {
+  wss.clients.forEach((ws) => {
+    if (ws.isAlive === false) return ws.terminate();
+    ws.isAlive = false;
+    try { ws.ping(); } catch (e) {}
+  });
+}, 25000);
+
+wss.on('close', () => clearInterval(heartbeatInterval));
+
 wss.on('connection', (ws, req) => {
+  ws.isAlive = true;
+  ws.on('pong', () => { ws.isAlive = true; });
   // Cloudflare Tunnel / Reverse Proxy Compatibility: Check forwarded headers if present
   const forwardedIp = req.headers['cf-connecting-ip'] || (req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'].split(',')[0].trim() : null);
   const rawIp = req.socket.remoteAddress || 'unknown';
@@ -217,6 +231,10 @@ wss.on('connection', (ws, req) => {
       const data = JSON.parse(raw);
 
       switch (data.type) {
+        case 'ping': {
+          ws.send(JSON.stringify({ type: 'pong', timestamp: Date.now() }));
+          return;
+        }
         case 'join': {
           if (!data.roomId || typeof data.roomId !== 'string') return;
           const sanitizedRoomId = data.roomId.trim().substring(0, 64);

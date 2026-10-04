@@ -158,12 +158,6 @@
   let pendingIceCandidates = [];
   // Dynamic ICE Configuration with Turn Relay & Anti-IP-Leak Protection
   const getRtcConfig = () => {
-    const stunServers = [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun.cloudflare.com:3478' }
-    ];
-
     const turnRelays = [
       {
         urls: [
@@ -176,9 +170,16 @@
       }
     ];
 
+    const stunServers = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun.cloudflare.com:3478' }
+    ];
+
     return {
       iceServers: [...turnRelays, ...stunServers],
-      iceTransportPolicy: 'relay' // Guaranteed IP Masking: Refuses direct P2P connection, preventing IP leak to peers
+      iceCandidatePoolSize: 10
     };
   };
 
@@ -1527,26 +1528,64 @@
   };
 
   // WebSocket Connection
+  let wsPingInterval = null;
+  let wsReconnectTimer = null;
+  let isWsReconnecting = false;
+
   const connectRelay = (roomId) => {
+    if (wsReconnectTimer) {
+      clearTimeout(wsReconnectTimer);
+      wsReconnectTimer = null;
+    }
+    if (wsPingInterval) {
+      clearInterval(wsPingInterval);
+      wsPingInterval = null;
+    }
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}`;
+
+    try {
+      if (ws) {
+        ws.onopen = null;
+        ws.onmessage = null;
+        ws.onclose = null;
+        ws.onerror = null;
+        try { ws.close(); } catch (e) {}
+      }
+    } catch (e) {}
 
     ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
+      isWsReconnecting = false;
+      if (cryptoStatusLabel) cryptoStatusLabel.textContent = 'SECURE (E2EE)';
+      if (statusDot) statusDot.style.background = 'var(--accent-emerald)';
+
       ws.send(JSON.stringify({
         type: 'join',
         roomId: roomId,
         peerId: myEphemeralPeerId,
         clientType: 'chat'
       }));
+
       // Announce encrypted presence to authenticated peers only
       sendEncryptedPresenceAnnouncement(false);
+
+      // Render Heartbeat: Ping server every 20 seconds to keep connection alive through proxies
+      wsPingInterval = setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          try { ws.send(JSON.stringify({ type: 'ping' })); } catch (e) {}
+        }
+      }, 20000);
     };
 
     ws.onmessage = async (evt) => {
       try {
         const msg = JSON.parse(evt.data);
+
+        // Ignore heartbeat pongs
+        if (msg.type === 'pong') return;
 
         switch (msg.type) {
           case 'presence': {
@@ -1581,6 +1620,17 @@
                 videoBadge.style.display = 'none';
               }
             }
+
+            // Auto-negotiate video call if both peers are in call
+            if (isVideoCallActive && activeVideoPeers.length > 1) {
+              if (!peerConnection || peerConnection.iceConnectionState === 'new' || peerConnection.iceConnectionState === 'disconnected' || peerConnection.iceConnectionState === 'failed') {
+                const otherPeers = activeVideoPeers.filter(p => p !== myEphemeralPeerId);
+                if (otherPeers.length > 0 && myEphemeralPeerId > otherPeers[0]) {
+                  console.log('[WEBRTC] Automatically initiating call offer to video peer:', otherPeers[0]);
+                  createAndSendOffer();
+                }
+              }
+            }
             break;
           }
 
@@ -1594,19 +1644,26 @@
               try {
                 const decrypted = await window.stealthCrypto.decrypt(msg.payload);
                 if (decrypted && decrypted.signal) {
+                  // If receiving an offer and video not active, auto-activate video call!
+                  if (decrypted.signal.offer && !isVideoCallActive) {
+                    showToast('📞 Incoming video call from peer...');
+                    await startVideoCall(false);
+                  }
                   await handleWebRtcSignal(decrypted.signal, decrypted.senderPeerId || msg.sender);
                 }
               } catch (e) {
                 console.warn('[SECURITY] WebRTC signal dropped: Decryption or authentication failed.');
               }
             } else if (msg.signal) {
+              if (msg.signal.offer && !isVideoCallActive) {
+                await startVideoCall(false);
+              }
               await handleWebRtcSignal(msg.signal, msg.sender);
             }
             break;
           }
 
           case 'room_wiped': {
-            // Cryptographic Verification: Verify wipe packet was signed with the room's MAC key
             if (window.stealthCrypto && window.stealthCrypto.activeMacKey && msg.authTag) {
               const expected = CryptoJS.HmacSHA256('WIPE_ROOM:' + currentRoom, window.stealthCrypto.activeMacKey).toString();
               if (StealthCrypto.timingSafeEqual(expected, msg.authTag)) {
@@ -1626,11 +1683,22 @@
     };
 
     ws.onclose = () => {
-      if (cryptoStatusLabel) cryptoStatusLabel.textContent = 'DISCONNECTED';
+      if (wsPingInterval) {
+        clearInterval(wsPingInterval);
+        wsPingInterval = null;
+      }
+
+      if (cryptoStatusLabel) cryptoStatusLabel.textContent = 'RECONNECTING...';
       if (statusDot) statusDot.style.background = 'var(--accent-crimson)';
-      if (peerCountLabel) peerCountLabel.textContent = '0';
-      if (peerDockBtn) peerDockBtn.dataset.tooltip = 'Disconnected';
-      stopChaffGenerator();
+
+      // Auto-reconnect if inside an active room
+      if (currentRoom && !isWsReconnecting) {
+        isWsReconnecting = true;
+        wsReconnectTimer = setTimeout(() => {
+          console.log('[AEGIS] Auto-reconnecting to relay...');
+          connectRelay(blindedRoomId || currentRoom);
+        }, 1500);
+      }
     };
   };
 
