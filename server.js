@@ -86,7 +86,7 @@ const server = http.createServer((req, res) => {
 
     const ext = path.extname(filePath).toLowerCase();
     const contentType = MIME_TYPES[ext] || 'application/octet-stream';
-    res.writeHead(200, { 'Content-Type': contentType });
+    res.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0', 'Pragma': 'no-cache', 'Expires': '0' });
     fs.createReadStream(filePath).pipe(res);
   });
 });
@@ -306,9 +306,7 @@ wss.on('connection', (ws, req) => {
             });
             for (const client of roomSet) {
               if (client !== ws && client.readyState === 1) { // WebSocket.OPEN
-                if (client.clientType === 'video' || client.hasVideo) {
-                  client.send(serialized);
-                }
+                client.send(serialized);
               }
             }
           }

@@ -63,7 +63,7 @@
   const modalRemoteVideo = document.getElementById('modalRemoteVideo');
   const modalLocalVideo = document.getElementById('modalLocalVideo');
   const modalWaitingState = document.getElementById('modalWaitingState');
-  const modalLocalPipWrap = document.getElementById('modalLocalPipWrap');
+  // modalLocalPipWrap is already declared at the top of the file
   const btnModalToggleAudio = document.getElementById('btnModalToggleAudio');
   const btnModalToggleVideo = document.getElementById('btnModalToggleVideo');
   const btnModalFlipCamera = document.getElementById('btnModalFlipCamera');
@@ -151,7 +151,7 @@
   let peerConnection = null;
   let isVideoCallActive = false;
   let isScreenSharing = false;
-  let isIpCloaked = false; // false = Direct P2P, true = Force TURN Relay
+  let isIpCloaked = true; // Guaranteed IP Privacy: Always Force TURN Relay // false = Direct P2P, true = Force TURN Relay
   let isAudioMuted = false;
   let isVideoMuted = false;
   let facingMode = 'user';
@@ -177,8 +177,8 @@
     ];
 
     return {
-      iceServers: isIpCloaked ? [...stunServers, ...turnRelays] : stunServers,
-      iceTransportPolicy: isIpCloaked ? 'relay' : 'all' // When 'relay', refuses direct P2P, hiding caller IP!
+      iceServers: [...turnRelays, ...stunServers],
+      iceTransportPolicy: 'relay' // Guaranteed IP Masking: Refuses direct P2P connection, preventing IP leak to peers
     };
   };
 
@@ -727,43 +727,14 @@
   }
 
   btnShareInvite.addEventListener('click', () => {
-    const key = passphraseInput.value;
+    const key = (window.stealthCrypto && window.stealthCrypto.rawPassphrase) || passphraseInput.value || '';
     const url = `${window.location.origin}${window.location.pathname}#room=${encodeURIComponent(currentRoom)}&key=${encodeURIComponent(key)}`;
     navigator.clipboard.writeText(url).then(() => {
       showToast('✓ Secret invite link copied to clipboard!');
     });
   });
 
-  // IP Cloaking / Relay Management
-  const btnIpCloakToggle = document.getElementById('btnIpCloakToggle');
-  const ipCloakBadge = document.getElementById('ipCloakBadge');
-
-  const toggleIpCloaking = () => {
-    isIpCloaked = !isIpCloaked;
-    if (ipCloakBadge) {
-      ipCloakBadge.textContent = isIpCloaked ? 'RELAY' : 'P2P';
-      if (isIpCloaked) {
-        ipCloakBadge.classList.add('cloaked');
-      } else {
-        ipCloakBadge.classList.remove('cloaked');
-      }
-    }
-    if (btnIpCloakToggle) {
-      btnIpCloakToggle.dataset.tooltip = isIpCloaked
-        ? 'IP Privacy: MASKED (Relayed through encrypted TURN proxy, home IP hidden)'
-        : 'IP Privacy: DIRECT (Direct P2P, lowest latency)';
-    }
-    showToast(isIpCloaked
-      ? '🛡️ IP MASKED (TURN Relay ON): Your home IP is hidden from peers.'
-      : '⚡ DIRECT P2P (Relay OFF): Direct low-latency streaming.');
-
-    if (isVideoCallActive && peerConnection) {
-      showToast('🔄 Reconnecting video call with new relay profile...');
-      createAndSendOffer();
-    }
-  };
-
-  if (btnIpCloakToggle) btnIpCloakToggle.addEventListener('click', toggleIpCloaking);
+  // Note: Direct P2P option has been permanently replaced by mandatory Encrypted TURN Relay for total IP anonymity.
 
     // Active Peers List Trigger
   if (btnActivePeers) {
@@ -1075,6 +1046,7 @@
   };
 
   const clearRemotePeer = (msg = null) => {
+    stopAudioVisualizer();
     if (remoteStream) {
       remoteStream.getTracks().forEach(t => t.stop());
       remoteStream = new MediaStream();
@@ -1663,6 +1635,7 @@
   };
 
   // Replay Attack Cache: Authenticated against cryptographic authTag
+  let lastDecryptionNoticeTime = 0;
   const seenAuthTags = new Set();
   const markAuthTagSeen = (tag) => {
     if (!tag) return;
@@ -1746,15 +1719,23 @@
         burnSeconds: Number(data.burnSeconds) || 0
       });
     } catch (err) {
-      console.warn('[SECURITY] Inbound packet decryption failed: HMAC mismatch or different room passphrase.');
-      renderMessage({
-        sender: 'SECURITY NOTICE',
-        text: '⚠️ Incoming message could not be decrypted. A peer in this room may have joined with a different secret passphrase.',
-        timestamp: Date.now(),
-        isOutgoing: false,
-        isError: true,
-        rawCiphertext: payload.ciphertext
-      });
+      console.warn('[SECURITY] Inbound packet decryption failed:', err.message);
+      const now = Date.now();
+      if (now - lastDecryptionNoticeTime > 10000) {
+        lastDecryptionNoticeTime = now;
+        const isSaltMismatch = payload && payload.salt && window.stealthCrypto && (payload.salt !== window.stealthCrypto.saltHex);
+        const noticeText = isSaltMismatch
+          ? '⚠️ Key derivation mismatch: A peer in this room joined with a different Secret Passphrase or room name. Please verify credentials and refresh.'
+          : '⚠️ Inbound packet failed HMAC verification. A peer in this room may have joined with a different secret passphrase.';
+        renderMessage({
+          sender: 'SECURITY NOTICE',
+          text: noticeText,
+          timestamp: Date.now(),
+          isOutgoing: false,
+          isError: true,
+          rawCiphertext: payload.ciphertext
+        });
+      }
     }
   };
 
@@ -2399,4 +2380,151 @@
   roomInput.value = generateRoomId();
   parseUrlFragment();
   loadNetworkInfo();
+
+
+  // ==========================================================================
+  // AEGIS VIDEO ENHANCEMENTS: VOICE ACTIVITY, NATIVE PIP, FULLSCREEN & SWAP
+  // ==========================================================================
+
+  let audioVisualizerCtx = null;
+  let remoteAudioAnalyser = null;
+  let visualizerRaf = null;
+  let isViewSwapped = false;
+  let isAudioOnlyMode = false;
+
+  const initAudioVisualizer = (stream) => {
+    try {
+      if (!stream || stream.getAudioTracks().length === 0) return;
+      if (!audioVisualizerCtx) {
+        audioVisualizerCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioVisualizerCtx.state === 'suspended') {
+        audioVisualizerCtx.resume().catch(() => {});
+      }
+      const source = audioVisualizerCtx.createMediaStreamSource(stream);
+      remoteAudioAnalyser = audioVisualizerCtx.createAnalyser();
+      remoteAudioAnalyser.fftSize = 64;
+      source.connect(remoteAudioAnalyser);
+
+      const dataArray = new Uint8Array(remoteAudioAnalyser.frequencyBinCount);
+      const remoteSpeakingEl = document.getElementById('remoteSpeakingIndicator');
+      const remoteVideoEl = document.getElementById('modalRemoteVideo');
+
+      const checkAudio = () => {
+        if (!remoteAudioAnalyser) return;
+        remoteAudioAnalyser.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+        const avg = sum / dataArray.length;
+        const isSpeaking = avg > 20;
+
+        if (remoteSpeakingEl) {
+          remoteSpeakingEl.style.display = isSpeaking ? 'inline-flex' : 'none';
+        }
+        if (remoteVideoEl) {
+          if (isSpeaking) {
+            remoteVideoEl.classList.add('speaking-active-ring');
+          } else {
+            remoteVideoEl.classList.remove('speaking-active-ring');
+          }
+        }
+        visualizerRaf = requestAnimationFrame(checkAudio);
+      };
+      if (visualizerRaf) cancelAnimationFrame(visualizerRaf);
+      visualizerRaf = requestAnimationFrame(checkAudio);
+    } catch (e) {
+      console.warn('Audio visualizer init error:', e);
+    }
+  };
+
+  const stopAudioVisualizer = () => {
+    if (visualizerRaf) {
+      cancelAnimationFrame(visualizerRaf);
+      visualizerRaf = null;
+    }
+    const remoteSpeakingEl = document.getElementById('remoteSpeakingIndicator');
+    const remoteVideoEl = document.getElementById('modalRemoteVideo');
+    if (remoteSpeakingEl) remoteSpeakingEl.style.display = 'none';
+    if (remoteVideoEl) remoteVideoEl.classList.remove('speaking-active-ring');
+  };
+
+  // Swap Views (Main Video & PiP)
+  const toggleViewSwap = () => {
+    isViewSwapped = !isViewSwapped;
+    const stage = document.querySelector('.video-stage-inner');
+    if (stage) stage.classList.toggle('view-swapped', isViewSwapped);
+    showToast(isViewSwapped ? 'Swapped main view to your camera' : 'Restored main view to peer');
+  };
+
+  const btnHeaderSwapView = document.getElementById('btnHeaderSwapView');
+  if (btnHeaderSwapView) btnHeaderSwapView.addEventListener('click', toggleViewSwap);
+
+  const modalLocalPipWrap = document.getElementById('modalLocalPipWrap');
+  if (modalLocalPipWrap) {
+    modalLocalPipWrap.addEventListener('click', (e) => {
+      // Single click swaps views
+      toggleViewSwap();
+    });
+  }
+
+  // Fullscreen Toggle
+  const btnModalFullscreen = document.getElementById('btnModalFullscreen');
+  const iconEnterFullscreen = document.getElementById('iconEnterFullscreen');
+  const iconExitFullscreen = document.getElementById('iconExitFullscreen');
+  if (btnModalFullscreen) {
+    btnModalFullscreen.addEventListener('click', () => {
+      const modal = document.getElementById('videoCallModal');
+      if (!document.fullscreenElement) {
+        if (modal.requestFullscreen) modal.requestFullscreen().catch(() => {});
+        else if (modal.webkitRequestFullscreen) modal.webkitRequestFullscreen();
+        if (iconEnterFullscreen) iconEnterFullscreen.style.display = 'none';
+        if (iconExitFullscreen) iconExitFullscreen.style.display = 'inline';
+      } else {
+        if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+        if (iconEnterFullscreen) iconEnterFullscreen.style.display = 'inline';
+        if (iconExitFullscreen) iconExitFullscreen.style.display = 'none';
+      }
+    });
+  }
+
+  // Native Picture-in-Picture
+  const btnModalNativePip = document.getElementById('btnModalNativePip');
+  if (btnModalNativePip) {
+    btnModalNativePip.addEventListener('click', async () => {
+      try {
+        if (document.pictureInPictureElement) {
+          await document.exitPictureInPicture();
+          btnModalNativePip.classList.remove('active-pip');
+        } else if (modalRemoteVideo && modalRemoteVideo.srcObject) {
+          await modalRemoteVideo.requestPictureInPicture();
+          btnModalNativePip.classList.add('active-pip');
+        } else if (modalLocalVideo && modalLocalVideo.srcObject) {
+          await modalLocalVideo.requestPictureInPicture();
+          btnModalNativePip.classList.add('active-pip');
+        }
+      } catch (err) {
+        console.warn('Native PiP error:', err);
+        showToast('Picture-in-Picture not supported or active stream required');
+      }
+    });
+  }
+
+  // Audio-Only Low-Bandwidth Mode
+  const btnModalAudioOnly = document.getElementById('btnModalAudioOnly');
+  const iconAudioOnlyOff = document.getElementById('iconAudioOnlyOff');
+  const iconAudioOnlyOn = document.getElementById('iconAudioOnlyOn');
+  if (btnModalAudioOnly) {
+    btnModalAudioOnly.addEventListener('click', () => {
+      if (!localStream) return;
+      isAudioOnlyMode = !isAudioOnlyMode;
+      localStream.getVideoTracks().forEach(t => {
+        t.enabled = !isAudioOnlyMode;
+      });
+      btnModalAudioOnly.classList.toggle('active-audio-only', isAudioOnlyMode);
+      if (iconAudioOnlyOff) iconAudioOnlyOff.style.display = isAudioOnlyMode ? 'none' : 'inline';
+      if (iconAudioOnlyOn) iconAudioOnlyOn.style.display = isAudioOnlyMode ? 'inline' : 'none';
+      showToast(isAudioOnlyMode ? '🔇 Audio-Only mode (Camera paused, conserving bandwidth)' : '📹 Video camera restored');
+    });
+  }
 })();

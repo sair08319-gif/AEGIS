@@ -79,11 +79,11 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><line x1="2" y1="2" x2="8" y2="8"/></svg>
           </button>
 
-          <!-- IP Cloak / Relay Settings Button -->
-          <button type="button" id="btnIpCloakToggle" class="dock-btn" data-tooltip="IP Privacy: Direct P2P (Click to mask IP via Relay)" aria-label="IP Privacy Mode">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            <span id="ipCloakBadge" class="dock-badge-text" style="font-size: 0.62rem; font-weight: 800;">P2P</span>
-          </button>
+          <!-- IP Privacy: Permanent Relay Masking (P2P Disabled) -->
+          <div class="relay-secure-badge" data-tooltip="IP Privacy: GUARANTEED MASKED (Direct P2P disabled, all media routed via encrypted TURN Relay)" aria-label="IP Masked via Relay">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            <span class="relay-badge-text">RELAY MASKED</span>
+          </div>
 
           <!-- Copy Invite Link Icon -->
           <button type="button" id="btnShareInvite" class="dock-btn" data-symbol="share" data-tooltip="Copy Secret Invite Link" aria-label="Copy Secret Invite Link">
@@ -265,8 +265,26 @@
         <span class="brand-dot-pulse"></span>
         <span class="video-modal-title">AEGIS SECURE VIDEO</span>
         <span id="modalRoomBadge" class="modal-room-badge"></span>
+        <span id="modalQualityBadge" class="modal-quality-badge" title="Connection Mode">🛡️ RELAY • HD 720p • MASKED</span>
+        <div id="remoteSpeakingIndicator" class="speaking-indicator" style="display: none;" title="Peer Speaking">
+          <span class="wave-bar"></span>
+          <span class="wave-bar"></span>
+          <span class="wave-bar"></span>
+          <span>SPEAKING</span>
+        </div>
       </div>
       <div class="video-modal-header-actions">
+        <!-- Swap Video Views -->
+        <button type="button" id="btnHeaderSwapView" class="video-modal-btn view-swap-btn" title="Swap Main and Self Video" aria-label="Swap View">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M7 16V4m0 0L3 8m4-4l4 4m6 4v12m0 0l4-4m-4 4l-4-4"/></svg>
+          <span>Swap View</span>
+        </button>
+        <!-- Fullscreen Toggle -->
+        <button type="button" id="btnModalFullscreen" class="video-modal-btn fullscreen-btn" title="Toggle Fullscreen Video" aria-label="Fullscreen">
+          <svg id="iconEnterFullscreen" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+          <svg id="iconExitFullscreen" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="display: none;"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+          <span>Fullscreen</span>
+        </button>
         <!-- Minimize to Floating Bubble -->
         <button type="button" id="btnMinimizeToBubble" class="video-modal-btn minimize-btn" title="Minimize to Floating Bubble" aria-label="Minimize">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
@@ -282,6 +300,7 @@
     <!-- Video Stage -->
     <div class="video-stage-inner">
       <video id="modalRemoteVideo" class="modal-remote-video" autoplay playsinline></video>
+      <div id="remotePeerStatusBanner" class="remote-peer-status-banner" style="display: none;"></div>
       <div id="screenSharingBanner" class="screen-sharing-banner" style="display: none;">
         <span>🖥️ Screen sharing active</span>
         <button type="button" id="btnStopScreenShareBadge" class="btn-stop-share">Stop Sharing</button>
@@ -315,6 +334,13 @@
       </button>
       <button type="button" id="btnModalFlipCamera" class="ctrl-btn" title="Flip Camera" aria-label="Flip Camera">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0-4.42-3.58-8-8-8s-8 3.58-8 8"/><path d="M4 10l-3-3 3-3"/><path d="M4 14c0 4.42 3.58 8 8 8s8-3.58 8-8"/><path d="M20 14l3 3-3 3"/></svg>
+      </button>
+      <button type="button" id="btnModalNativePip" class="ctrl-btn" title="Pop out into floating OS window (Picture-in-Picture)" aria-label="Picture-in-Picture">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><rect x="12" y="10" width="8" height="5" rx="1" ry="1"/><line x1="8" y1="21" x2="16" y2="21"/></svg>
+      </button>
+      <button type="button" id="btnModalAudioOnly" class="ctrl-btn" title="Audio-Only Mode (Save Bandwidth & Battery)" aria-label="Audio Only">
+        <svg id="iconAudioOnlyOff" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+        <svg id="iconAudioOnlyOn" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" style="display: none;"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/><polyline points="20 6 9 17 4 12"/></svg>
       </button>
       <button type="button" id="btnModalMinimizeBottom" class="ctrl-btn" title="Minimize to Chat Bubble" aria-label="Minimize to Chat">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
@@ -409,8 +435,8 @@
 
   <!-- Scripts -->
   <script src="crypto-js.js"></script>
-  <script src="crypto.js?v=2.2"></script>
-  <script src="app.js?v=2.2"></script>
+  <script src="crypto.js?v=4.0"></script>
+  <script src="app.js?v=4.0"></script>
 
 
 </body>

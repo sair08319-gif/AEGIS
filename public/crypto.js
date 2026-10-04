@@ -1,12 +1,16 @@
-﻿/**
- * ZERO-KNOWLEDGE CLIENT-SIDE CRYPTOGRAPHIC ENGINE (HARDENED v3)
+/**
+ * ZERO-KNOWLEDGE CLIENT-SIDE CRYPTOGRAPHIC ENGINE (HARDENED v4.0)
  * Implements:
  * 1. Cryptographic Key Separation (512-bit PBKDF2 split into distinct EncKey & MacKey)
  * 2. AES-256-CBC Encryption + HMAC-SHA256 Authenticated Encryption-then-MAC
  * 3. Fixed-Size 2048-Byte Padding (Blinds packet size from traffic analysis)
  * 4. Chaff / Dummy Traffic generation (Blinds transmission timing)
  * 5. Constant-time MAC comparison (Defeats timing attacks)
+ * 6. URL-safe Key Generation (Prevents special character corruption in invite links)
+ * 7. Canonical NFC Unicode & Whitespace Normalization
  */
+
+const CRYPTO_ENGINE_VERSION = 'v4.0';
 
 class StealthCrypto {
   constructor() {
@@ -15,11 +19,13 @@ class StealthCrypto {
     this.rawPassphrase = null;
     this.saltHex = null;
     this.TARGET_PADDING_SIZE = 2048; // Constant size for ALL messages
+    this.version = CRYPTO_ENGINE_VERSION;
   }
 
-  // Generate cryptographically secure random string
+  // Generate cryptographically secure random string with URL-safe & shell-safe charset
+  // Excludes #, &, +, ?, =, ; to ensure invite URLs and fragments are never mangled
   static generateSecretKey(length = 20) {
-    const charset = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%^&*';
+    const charset = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@$%*-_';
     let result = '';
     
     if (window.crypto && window.crypto.getRandomValues) {
@@ -56,7 +62,8 @@ class StealthCrypto {
   // Derive a one-way blinded Room ID so the relay server never learns the plaintext room name
   static blindRoomId(roomId) {
     if (!roomId) return 'blinded-default';
-    return CryptoJS.SHA256('aegis-blind-room-v1:' + roomId.trim().toLowerCase()).toString().substring(0, 32);
+    const normalized = String(roomId).trim().toLowerCase().normalize('NFC');
+    return CryptoJS.SHA256('aegis-blind-room-v1:' + normalized).toString().substring(0, 32);
   }
 
   /**
@@ -66,17 +73,29 @@ class StealthCrypto {
    * - Second 256 bits = HMAC-SHA256 Authentication Key
    */
   async initializeKey(passphrase, roomId) {
-    this.rawPassphrase = passphrase;
+    // Canonical NFC Unicode & whitespace normalization
+    const normalizedRoom = String(roomId || 'default').trim().toLowerCase().normalize('NFC');
+    const cleanPass = String(passphrase || '').trim().normalize('NFC');
 
-    // Domain-separated deterministic room salt: Normalized to lower-case and trimmed
-    const normalizedRoom = String(roomId || 'default').trim().toLowerCase();
-    const saltHash = CryptoJS.SHA256('aegis-salt-v3:' + normalizedRoom);
+    // Store raw for reference and invite links
+    this.rawPassphrase = cleanPass;
+
+    // Domain-separated deterministic room salt
+    const saltHash = CryptoJS.SHA256('aegis-salt-v4:' + normalizedRoom);
     this.saltHex = saltHash.toString().substring(0, 32);
 
     const salt = CryptoJS.enc.Hex.parse(this.saltHex);
 
-    // Derive 512 bits (16 32-bit words) with trimmed passphrase to eliminate mobile keyboard space issues
-    const cleanPass = String(passphrase || '').trim();
+    // Cross-device diagnostic log
+    console.log(
+      '%c[AEGIS CRYPTO ' + CRYPTO_ENGINE_VERSION + '] Key Derivation Inputs:',
+      'color: #10b981; font-weight: bold;',
+      '\n  Room (normalized):', JSON.stringify(normalizedRoom),
+      '\n  Pass length:', cleanPass.length,
+      '\n  Salt hex:', this.saltHex
+    );
+
+    // Derive 512 bits (16 32-bit words)
     const derived = CryptoJS.PBKDF2(cleanPass, salt, {
       keySize: 512 / 32,
       iterations: 30000,
@@ -86,6 +105,13 @@ class StealthCrypto {
     // Key Separation: Split derived material into two independent 256-bit keys
     this.activeEncKey = CryptoJS.lib.WordArray.create(derived.words.slice(0, 8), 32);
     this.activeMacKey = CryptoJS.lib.WordArray.create(derived.words.slice(8, 16), 32);
+
+    console.log(
+      '%c[AEGIS CRYPTO] Derived key fingerprints:',
+      'color: #f59e0b; font-weight: bold;',
+      '\n  EncKey prefix:', this.activeEncKey.toString().substring(0, 16),
+      '\n  MacKey prefix:', this.activeMacKey.toString().substring(0, 16)
+    );
 
     return this.saltHex;
   }
@@ -125,10 +151,10 @@ class StealthCrypto {
     const ciphertext = encrypted.toString();
 
     // 4. Encrypt-then-MAC: HMAC-SHA256 Authentication Tag using dedicated MAC Key
-    // Include separator to avoid collision/boundary attacks
     const authTag = CryptoJS.HmacSHA256(ciphertext + ':' + ivHex, this.activeMacKey).toString();
 
     return {
+      v: CRYPTO_ENGINE_VERSION,
       ciphertext: ciphertext,
       iv: ivHex,
       salt: this.saltHex,
@@ -158,12 +184,35 @@ class StealthCrypto {
       throw new Error('Cryptographic key not initialized');
     }
 
-    const { ciphertext, iv, authTag } = payload;
+    const { ciphertext, iv, authTag, salt, v } = payload;
+
+    if (v && v !== CRYPTO_ENGINE_VERSION) {
+      console.warn(
+        '%c[AEGIS CRYPTO] Version mismatch: sender version=' + v + ', our version=' + CRYPTO_ENGINE_VERSION,
+        'color: #ef4444; font-weight: bold;'
+      );
+    }
+
+    if (salt && salt !== this.saltHex) {
+      console.warn(
+        '%c[AEGIS CRYPTO] SALT MISMATCH — sender derived a different room key!',
+        'color: #ef4444; font-weight: bold;',
+        '\n  Our salt:', this.saltHex,
+        '\n  Their salt:', salt
+      );
+    }
 
     // 1. Verify HMAC with Constant-Time Check using dedicated MAC Key
     const expectedTag = CryptoJS.HmacSHA256(ciphertext + ':' + iv, this.activeMacKey).toString();
     if (!StealthCrypto.timingSafeEqual(expectedTag, authTag)) {
-      throw new Error('Decryption Failed: Authentication Tag mismatch or incorrect Secret Passphrase.');
+      console.error(
+        '%c[AEGIS CRYPTO] HMAC MISMATCH DETAILS:',
+        'color: #ef4444; font-weight: bold;',
+        '\n  Expected tag prefix:', expectedTag.substring(0, 16),
+        '\n  Received tag prefix:', (authTag || '').substring(0, 16),
+        '\n  Salt match:', salt === this.saltHex
+      );
+      throw new Error('Decryption Failed: Authentication Tag mismatch (Salt match: ' + (salt === this.saltHex) + ')');
     }
 
     // 2. Decrypt with dedicated Encryption Key
@@ -193,3 +242,4 @@ class StealthCrypto {
 }
 
 window.stealthCrypto = new StealthCrypto();
+console.log('%c[AEGIS] Crypto Engine ' + CRYPTO_ENGINE_VERSION + ' initialized', 'color: #10b981; font-weight: bold;');
