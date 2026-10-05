@@ -128,6 +128,10 @@ All 8 identified flaws and architectural gaps have been resolved:
   - **3-Second Emergency Self-Destruct Countdown:** Displays a circular 3-second countdown timer. If the user clicks **"Re-enter Fullscreen"** within 3 seconds, session resumes seamlessly. If 3 seconds elapse, `triggerPanicWipe()` erases all RAM keys, clears session storage, broadcasts channel destruction, and exits the tab.
   - **Graceful Leave & Wipe Integration:** Leaving the room intentionally via `btnLeaveRoom` cleans up timers, resets kiosk state, and gracefully exits fullscreen without triggering false alarms.
 
+### 14. `whiteboardModal` Temporal Dead Zone Bug (Fixed ✅ - v4.6)
+* **Files:** `public/app.js`, `public/index.html`
+* **Fix Applied:** Moved `whiteboardModal` and associated canvas element declarations to the top of the closure alongside other modal elements, hoisted `showToast`, `triggerWipe`, and `triggerPanicWipe` function declarations, and bumped cache-buster to `v=4.6`.
+
 ---
 
 ## 🚀 How to Run and Test

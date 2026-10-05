@@ -144,6 +144,14 @@
   const kioskStatusBadge = document.getElementById('kioskStatusBadge');
   const shieldVeilStandardActions = document.getElementById('shieldVeilStandardActions');
 
+  // Whiteboard Modal Elements
+  const btnOpenWhiteboard = document.getElementById('btnOpenWhiteboard');
+  const whiteboardModal = document.getElementById('whiteboardModal');
+  const whiteboardBackdrop = document.getElementById('whiteboardBackdrop');
+  const btnCloseWhiteboard = document.getElementById('btnCloseWhiteboard');
+  const btnClearWhiteboard = document.getElementById('btnClearWhiteboard');
+  const whiteboardCanvas = document.getElementById('whiteboardCanvas');
+
   // State
   let ws = null;
   let currentRoom = '';
@@ -218,6 +226,17 @@
   let panicPressTimes = [];
   let decoyPressTimes = [];
   let blockedAttemptsCount = 0;
+
+  let toastTimer = null;
+  function showToast(msg) {
+    if (!stealthToast) return;
+    stealthToast.textContent = msg;
+    stealthToast.style.display = 'block';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+      stealthToast.style.display = 'none';
+    }, 2400);
+  }
 
   // Anti-Screenshot & Screen Privacy Shield State & Handlers
   const ORIGINAL_PAGE_TITLE = 'Aegis Stealth | Zero-Knowledge E2EE Chat';
@@ -546,7 +565,7 @@
       videoCallModal,
       floatingVideoBubble,
       imageLightboxModal,
-      whiteboardModal
+      whiteboardModal || document.getElementById('whiteboardModal')
     ];
 
     sensitiveContainers.forEach(container => {
@@ -775,17 +794,6 @@
   };
 
   let activePopoverSymbol = null;
-  let toastTimer = null;
-
-  const showToast = (msg) => {
-    if (!stealthToast) return;
-    stealthToast.textContent = msg;
-    stealthToast.style.display = 'block';
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => {
-      stealthToast.style.display = 'none';
-    }, 2400);
-  };
 
   const closePopover = () => {
     if (symbolPopoverCard) {
@@ -2293,7 +2301,7 @@
   };
 
   // Close tab or redirect immediately to blank page
-  const executeTabExit = () => {
+  function executeTabExit() {
     // 1. Attempt standard window.close()
     try {
       window.close();
@@ -2307,10 +2315,10 @@
         decoyScreen.style.display = 'flex';
       }
     }, 120);
-  };
+  }
 
   // Emergency Kill-Switch: Wipes room from memory, server, and destroys tab
-  const triggerWipe = (isIncoming = false) => {
+  function triggerWipe(isIncoming = false) {
     if (kioskCountdownTimer) {
       clearInterval(kioskCountdownTimer);
       kioskCountdownTimer = null;
@@ -2394,9 +2402,9 @@
   };
 
   // Anti-Forensics: PANIC WIPE
-  const triggerPanicWipe = () => {
+  function triggerPanicWipe() {
     triggerWipe(false);
-  };
+  }
 
   // Seamless Session Restoration (Restores Room & Chat History after Video / Refresh)
   const checkAndRestoreSession = async () => {
@@ -2483,12 +2491,6 @@
   // ==========================================================================
   // ENCRYPTED EPHEMERAL WHITEBOARD & SCRATCHPAD (POINTER-DRIVEN & REAL-TIME)
   // ==========================================================================
-  const btnOpenWhiteboard = document.getElementById('btnOpenWhiteboard');
-  const whiteboardModal = document.getElementById('whiteboardModal');
-  const whiteboardBackdrop = document.getElementById('whiteboardBackdrop');
-  const btnCloseWhiteboard = document.getElementById('btnCloseWhiteboard');
-  const btnClearWhiteboard = document.getElementById('btnClearWhiteboard');
-  const whiteboardCanvas = document.getElementById('whiteboardCanvas');
   let wbCtx = null;
   let isWbDrawing = false;
   let wbCurrentColor = '#10b981';
