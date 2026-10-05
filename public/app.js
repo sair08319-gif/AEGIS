@@ -615,6 +615,7 @@
 
   // Run Shield immediately
   initSecurityShield();
+  console.log('%c[AEGIS] Client App v4.6 loaded (Anti-Screenshot & Kiosk Active)', 'color: #38bdf8; font-weight: bold;');
 
   // Codename & Room Generators
   const generateCodename = () => {
