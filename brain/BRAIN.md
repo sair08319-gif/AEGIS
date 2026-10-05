@@ -1,4 +1,4 @@
-﻿# 🧠 Aegis Stealth Chat — Central Brain & Conversation Continuity
+# 🧠 Aegis Stealth Chat — Central Brain & Conversation Continuity
 
 > **Quick Resume Prompt for Any New AI Session:**
 > *"Resume Aegis Stealth Chat. Read `Z:\secure-stealth-chat\brain\BRAIN.md` and continue from the latest task."*
@@ -94,6 +94,39 @@ All 8 identified flaws and architectural gaps have been resolved:
 ### 8. Cloudflare Tunnel / Reverse Proxy Compatibility (Fixed ✅)
 * **File:** `server.js`
 * **Fix Applied:** Inspects `cf-connecting-ip` and `x-forwarded-for` headers, and expands localhost connection limits to prevent tunnel lockouts.
+
+### 10. `modalLocalPipWrap` Temporal Dead Zone Bug (Fixed ✅ - v4.2)
+* **Files:** `public/app.js`, `public/index.html`
+* **Fix Applied:** Moved `modalLocalPipWrap` declaration to the top of the closure alongside modal element references, routed the click listener to `toggleViewSwap()`, eliminated duplicate `const modalLocalPipWrap` at the bottom, and bumped script cache-buster to `v=4.2`.
+
+### 11. Anti-Screenshot & Screen Privacy Shield (Implemented ✅ - v4.3)
+* **Files:** `public/app.js`, `public/index.html`, `public/style.css`
+* **Defenses Implemented:**
+  - **Snipping Tool & Window Focus Camouflage:** When the browser window loses focus (`blur`, `visibilitychange` to hidden, or `Win+Shift+S`), an impenetrable frosted privacy veil (`#screenShieldOverlay`, 35px backdrop-blur) instantly covers sensitive chats, preventing screen snips from capturing clear text.
+  - **Hardware `PrintScreen` (PrtScn) Interception:** Intercepts `PrintScreen` keystroke, triggers the privacy veil, triggers the quarantined security alert sound/banner, and immediately purges the OS clipboard via `navigator.clipboard.writeText`.
+  - **CSS `@media print` Total Blackout:** Hardened CSS print styles blank all DOM elements and print a security violation warning if a user attempts to print or PDF-export via `Ctrl+P`.
+  - **Shortcut Restrictions:** Intercepts `Ctrl+P`, `Ctrl+S`, and DevTools inspector shortcuts (`F12`, `Ctrl+Shift+I/J/C`).
+  - **Context Menu & Anti-Drag:** Blocks right-click menus on sensitive message, video, and image surfaces; disables image dragging and message text selection.
+  - **Header Dock Status Indicator:** Added `SCREEN SHIELD` active badge in header action dock.
+  - **Resume Control:** Clean resume button on shield and `Escape` hotkey handler to restore view.
+
+### 12. Deep Minimized & Inactive Background Capture Defense (Implemented ✅ - v4.4)
+* **Files:** `public/app.js`, `public/index.html`, `public/style.css`
+* **Defenses Implemented:**
+  - **Deep DOM Blind (`body.shield-concealed`):** The instant Aegis is minimized or loses focus to another application, `body.shield-concealed` activates, forcing `.messages-viewport`, `.screen-chat`, and all media elements to `visibility: hidden !important; opacity: 0 !important; filter: blur(50px) !important;`. Any tool taking a full desktop screenshot or capturing background window handles via OS APIs (`PrintWindow`, DWM thumbnail peek, Alt+Tab previews) captures only zero-opacity empty/blacked-out canvas.
+  - **Browser Tab & Taskbar Title Disguising:** The moment the window is inactive or minimized, `document.title` immediately switches from `Aegis Stealth` to generic `"Search"`. When the user refocuses, the title is restored.
+  - **Anti-Click-Snip Protection (350ms Hold Delay):** Prevents snipping tools from clicking the inactive window to snap an instant frame; holds the shield for 350ms after focus so human confirmation or intentional interaction is verified before unveiling.
+  - **Decoy Search Engine Switcher:** Users can click **"🔍 Disguise as Search"** directly from the shield to immediately camouflage the entire window into a clean Google-like search engine interface.
+  - **Dynamic Forensic Anti-Leak Watermark:** Renders a subtle repeating diagonal cryptographic watermark across the chat stage displaying the viewer's `Codename • Room • Date • AEGIS E2EE`, neutralizing analog smartphone screen photography leaks.
+
+### 13. Opt-In Kiosk Fullscreen Lockdown Mode (Implemented ✅ - v4.5)
+* **Files:** `public/app.js`, `public/index.html`, `public/style.css`
+* **Defenses Implemented:**
+  - **Opt-In Kiosk Fullscreen Toggle:** Added `🛡️ Enforce Kiosk Fullscreen Mode` checkbox in Lobby join form. When checked, joining a room requests native fullscreen via `document.documentElement.requestFullscreen()`.
+  - **Header Dock Indicator:** Active sessions display an amber `KIOSK LOCKED` badge in the header action group.
+  - **Instant Screen Concealment on Exit:** If fullscreen is exited via `Esc`, window resizing, multi-monitor dragging, or OS window switching, `fullscreenchange` immediately engages `body.shield-concealed` (complete display blackout) and sounds a security alert chirp.
+  - **3-Second Emergency Self-Destruct Countdown:** Displays a circular 3-second countdown timer. If the user clicks **"Re-enter Fullscreen"** within 3 seconds, session resumes seamlessly. If 3 seconds elapse, `triggerPanicWipe()` erases all RAM keys, clears session storage, broadcasts channel destruction, and exits the tab.
+  - **Graceful Leave & Wipe Integration:** Leaving the room intentionally via `btnLeaveRoom` cleans up timers, resets kiosk state, and gracefully exits fullscreen without triggering false alarms.
 
 ---
 

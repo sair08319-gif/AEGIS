@@ -63,7 +63,7 @@
   const modalRemoteVideo = document.getElementById('modalRemoteVideo');
   const modalLocalVideo = document.getElementById('modalLocalVideo');
   const modalWaitingState = document.getElementById('modalWaitingState');
-  // modalLocalPipWrap is already declared at the top of the file
+  const modalLocalPipWrap = document.getElementById('modalLocalPipWrap');
   const btnModalToggleAudio = document.getElementById('btnModalToggleAudio');
   const btnModalToggleVideo = document.getElementById('btnModalToggleVideo');
   const btnModalFlipCamera = document.getElementById('btnModalFlipCamera');
@@ -131,6 +131,18 @@
   const btnDismissAlert = document.getElementById('btnDismissAlert');
   const shieldIndicator = document.getElementById('shieldIndicator');
   const shieldLabel = document.getElementById('shieldLabel');
+  const screenShieldOverlay = document.getElementById('screenShieldOverlay');
+  const shieldVeilReason = document.getElementById('shieldVeilReason');
+  const btnResumeShield = document.getElementById('btnResumeShield');
+  const btnSwitchToDecoy = document.getElementById('btnSwitchToDecoy');
+  const chatWatermarkOverlay = document.getElementById('chatWatermarkOverlay');
+  const screenShieldBadge = document.getElementById('screenShieldBadge');
+  const kioskModeToggle = document.getElementById('kioskModeToggle');
+  const kioskCountdownWrap = document.getElementById('kioskCountdownWrap');
+  const kioskCountdownNum = document.getElementById('kioskCountdownNum');
+  const btnReenterFullscreen = document.getElementById('btnReenterFullscreen');
+  const kioskStatusBadge = document.getElementById('kioskStatusBadge');
+  const shieldVeilStandardActions = document.getElementById('shieldVeilStandardActions');
 
   // State
   let ws = null;
@@ -206,6 +218,95 @@
   let panicPressTimes = [];
   let decoyPressTimes = [];
   let blockedAttemptsCount = 0;
+
+  // Anti-Screenshot & Screen Privacy Shield State & Handlers
+  const ORIGINAL_PAGE_TITLE = 'Aegis Stealth | Zero-Knowledge E2EE Chat';
+  const DECOY_PAGE_TITLE = 'Search';
+  let isShieldLocked = false;
+  let focusUnveilTimeout = null;
+
+  // Kiosk Lockdown Mode State
+  let isKioskModeActive = false;
+  let kioskCountdownTimer = null;
+  let kioskSecondsLeft = 3;
+
+  const showScreenShield = (reason = 'Content concealed to prevent unauthorized screen capture or snip.', locked = false) => {
+    if (!screenShieldOverlay) return;
+    if (shieldVeilReason) shieldVeilReason.textContent = reason;
+    document.body.classList.add('shield-concealed');
+    document.title = DECOY_PAGE_TITLE;
+    screenShieldOverlay.style.display = 'flex';
+    if (locked) isShieldLocked = true;
+  };
+
+  const hideScreenShield = (force = false) => {
+    if (!screenShieldOverlay) return;
+    if (isShieldLocked && !force) return;
+    isShieldLocked = false;
+    document.body.classList.remove('shield-concealed');
+    document.title = ORIGINAL_PAGE_TITLE;
+    screenShieldOverlay.style.display = 'none';
+  };
+
+  const triggerKioskViolation = () => {
+    if (!isKioskModeActive || !currentRoom) return;
+    document.body.classList.add('shield-concealed');
+    document.title = 'SECURITY VIOLATION';
+    if (shieldVeilReason) {
+      shieldVeilReason.textContent = 'FULLSCREEN EXITED: Return to fullscreen immediately or room will self-destruct!';
+    }
+    if (shieldVeilStandardActions) shieldVeilStandardActions.style.display = 'none';
+    if (kioskCountdownWrap) kioskCountdownWrap.style.display = 'flex';
+    if (screenShieldOverlay) screenShieldOverlay.style.display = 'flex';
+    isShieldLocked = true;
+    playSecurityAlarm();
+    kioskSecondsLeft = 3;
+    if (kioskCountdownNum) kioskCountdownNum.textContent = kioskSecondsLeft;
+    if (kioskCountdownTimer) clearInterval(kioskCountdownTimer);
+    kioskCountdownTimer = setInterval(() => {
+      kioskSecondsLeft--;
+      if (kioskCountdownNum) kioskCountdownNum.textContent = kioskSecondsLeft;
+      playChirp(440, 'sawtooth', 0.1);
+      if (kioskSecondsLeft <= 0) {
+        clearInterval(kioskCountdownTimer);
+        kioskCountdownTimer = null;
+        triggerPanicWipe();
+      }
+    }, 1000);
+  };
+
+  const abortKioskViolation = () => {
+    if (kioskCountdownTimer) {
+      clearInterval(kioskCountdownTimer);
+      kioskCountdownTimer = null;
+    }
+    if (kioskCountdownWrap) kioskCountdownWrap.style.display = 'none';
+    if (shieldVeilStandardActions) shieldVeilStandardActions.style.display = 'flex';
+    hideScreenShield(true);
+    showToast('✓ Fullscreen restored. Room secure.');
+  };
+
+  const purgeClipboard = async () => {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText('[AEGIS PROTOCOL: SCREEN CAPTURE RESTRICTED]');
+      }
+    } catch (e) {}
+  };
+
+  const updateForensicWatermark = (codenameText, roomText) => {
+    if (!chatWatermarkOverlay) return;
+    const cleanName = String(codenameText || 'AGENT').replace(/[^a-zA-Z0-9_\-]/g, '');
+    const cleanR = String(roomText || '').replace(/[^a-zA-Z0-9_\-]/g, '');
+    const dateStr = new Date().toISOString().substring(0, 10);
+    const textStr = `${cleanName} • ${cleanR} • ${dateStr} • AEGIS E2EE`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="340" height="170">
+      <text x="20" y="85" fill="%23ffffff" font-size="11" font-family="monospace" font-weight="bold" transform="rotate(-22 170 85)" opacity="0.6">
+        ${textStr}
+      </text>
+    </svg>`;
+    chatWatermarkOverlay.style.backgroundImage = `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}")`;
+  };
 
   // Metadata Defenses State
   let chaffEnabled = true;
@@ -341,6 +442,156 @@
     guardInput(roomInput);
     guardInput(passphraseInput);
     guardInput(messageInput);
+
+    // 3. Anti-Screenshot, Anti-Capture & Background Window Camouflage
+    // When the browser window loses focus (e.g. user clicks another window, minimizes, Win+Shift+S, Alt+Tab):
+    // Instantly blank all DOM elements, disguise the tab title, and show the privacy shield.
+    window.addEventListener('blur', () => {
+      if (focusUnveilTimeout) {
+        clearTimeout(focusUnveilTimeout);
+        focusUnveilTimeout = null;
+      }
+      if (currentRoom || isVideoCallActive) {
+        showScreenShield('WINDOW INACTIVE • CONCEALED TO PREVENT BACKGROUND CAPTURE / SNIPPING', false);
+      }
+    });
+
+    // Anti-Click-Snip Protection: When window regains focus, hold the shield for 350ms
+    // to prevent instant window-click screenshot grabbers from capturing plaintext in that frame
+    window.addEventListener('focus', () => {
+      if (isShieldLocked) return;
+      if (focusUnveilTimeout) clearTimeout(focusUnveilTimeout);
+      focusUnveilTimeout = setTimeout(() => {
+        if (document.hasFocus()) {
+          hideScreenShield(false);
+        }
+      }, 350);
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden' && (currentRoom || isVideoCallActive)) {
+        showScreenShield('MINIMIZED / BACKGROUND TAB • SECURE CONCEALMENT ACTIVE', false);
+      } else if (document.visibilityState === 'visible' && !isShieldLocked) {
+        if (focusUnveilTimeout) clearTimeout(focusUnveilTimeout);
+        focusUnveilTimeout = setTimeout(() => {
+          if (document.hasFocus()) {
+            hideScreenShield(false);
+          }
+        }, 350);
+      }
+    });
+
+    // 4. Hardware PrintScreen Key Interception & OS Clipboard Purge
+    window.addEventListener('keyup', (e) => {
+      if (e.key === 'PrintScreen' || e.code === 'PrintScreen' || e.keyCode === 44) {
+        showScreenShield('HARDWARE PRINTSCREEN / SNAPSHOT DETECTED • CONTENT CONCEALED', true);
+        purgeClipboard();
+        triggerSecurityAlert(
+          'SCREENSHOT ATTEMPT INTERCEPTED',
+          'Hardware PrintScreen key was pressed. Screen was immediately blanked and OS clipboard was purged.'
+        );
+      }
+    });
+
+    // 5. Intercept Print (Ctrl+P / Cmd+P), Save Page (Ctrl+S / Cmd+S), and DevTools Shortcuts
+    window.addEventListener('keydown', (e) => {
+      const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+
+      if (isCtrlOrCmd && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault();
+        e.stopPropagation();
+        showScreenShield('PRINTING FORBIDDEN • DISPLAY CONCEALED', true);
+        triggerSecurityAlert('PRINT ATTEMPT BLOCKED', 'Printing and PDF export are strictly forbidden in Aegis.');
+        return;
+      }
+
+      if (isCtrlOrCmd && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        e.stopPropagation();
+        triggerSecurityAlert('SAVE WEBPAGE BLOCKED', 'Saving raw webpage assets to disk is disabled.');
+        return;
+      }
+
+      if (
+        e.key === 'F12' ||
+        (isCtrlOrCmd && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j' || e.key === 'C' || e.key === 'c'))
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+        triggerSecurityAlert('DEVTOOLS INSPECTOR BLOCKED', 'DOM inspection and developer console shortcuts are restricted.');
+        return;
+      }
+    });
+
+    // 6. Resume Shield Button Listener
+    if (btnResumeShield) {
+      btnResumeShield.addEventListener('click', () => {
+        hideScreenShield(true);
+      });
+    }
+
+    if (btnSwitchToDecoy) {
+      btnSwitchToDecoy.addEventListener('click', () => {
+        if (screenShieldOverlay) screenShieldOverlay.style.display = 'none';
+        if (decoyScreen) decoyScreen.style.display = 'flex';
+        document.title = 'Search Engine';
+        showToast('🔍 Camouflage Decoy Active. Press ESC 3 times to return.');
+      });
+    }
+
+    // 7. Anti-Context Menu (Right-Click) on Sensitive Elements
+    const sensitiveContainers = [
+      screenChat,
+      messagesViewport,
+      videoCallModal,
+      floatingVideoBubble,
+      imageLightboxModal,
+      whiteboardModal
+    ];
+
+    sensitiveContainers.forEach(container => {
+      if (container) {
+        container.addEventListener('contextmenu', (e) => {
+          if (e.target === messageInput) return; // Allow right-click paste in message text input
+          e.preventDefault();
+        });
+      }
+    });
+
+    // 8. Anti-Drag on Images
+    document.addEventListener('dragstart', (e) => {
+      if (e.target && e.target.tagName && e.target.tagName.toLowerCase() === 'img') {
+        e.preventDefault();
+      }
+    });
+
+    // 9. Kiosk Fullscreen Change Detection & Restoration Handlers
+    const handleFullscreenChange = () => {
+      if (!isKioskModeActive || !currentRoom) return;
+      const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement);
+      if (!isFullscreen) {
+        triggerKioskViolation();
+      } else {
+        if (kioskCountdownTimer) {
+          abortKioskViolation();
+        }
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+
+    if (btnReenterFullscreen) {
+      btnReenterFullscreen.addEventListener('click', () => {
+        if (document.documentElement.requestFullscreen) {
+          document.documentElement.requestFullscreen().catch((err) => {
+            console.warn('Fullscreen request failed:', err);
+          });
+        } else if (document.documentElement.webkitRequestFullscreen) {
+          document.documentElement.webkitRequestFullscreen();
+        }
+      });
+    }
   };
 
   // Run Shield immediately
@@ -1348,7 +1599,11 @@
 
   if (modalLocalPipWrap) {
     modalLocalPipWrap.addEventListener('click', () => {
-      modalLocalPipWrap.classList.toggle('pip-expanded');
+      if (typeof toggleViewSwap === 'function') {
+        toggleViewSwap();
+      } else {
+        modalLocalPipWrap.classList.toggle('pip-expanded');
+      }
     });
   }
 
@@ -1403,12 +1658,20 @@
       if (chatHeaderInfo) chatHeaderInfo.style.display = 'flex';
       if (chatActionGroup) chatActionGroup.style.display = 'inline-flex';
       if (headerSymbolDock) headerSymbolDock.style.display = 'none';
+      if (isKioskModeActive) {
+        if (kioskStatusBadge) kioskStatusBadge.style.display = 'inline-flex';
+      } else {
+        if (kioskStatusBadge) kioskStatusBadge.style.display = 'none';
+      }
 
       // Save active session for instant return from video or page refresh
       saveActiveSession(currentRoom, codename, passphrase);
 
       // Start Chaff (Dummy Traffic) Generator
       startChaffGenerator();
+
+      // Render Dynamic Forensic Anti-Leak Watermark
+      updateForensicWatermark(codename, currentRoom);
 
       if (messageInput) messageInput.focus();
     } catch (err) {
@@ -1428,6 +1691,19 @@
     if (!rId || !pass) {
       alert('Room ID and Secret Passphrase are required.');
       return;
+    }
+
+    if (kioskModeToggle && kioskModeToggle.checked) {
+      isKioskModeActive = true;
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch((err) => {
+          console.warn('Fullscreen request error:', err);
+        });
+      } else if (document.documentElement.webkitRequestFullscreen) {
+        document.documentElement.webkitRequestFullscreen();
+      }
+    } else {
+      isKioskModeActive = false;
     }
 
     await enterRoom(rId, pass, cName);
@@ -2035,6 +2311,15 @@
 
   // Emergency Kill-Switch: Wipes room from memory, server, and destroys tab
   const triggerWipe = (isIncoming = false) => {
+    if (kioskCountdownTimer) {
+      clearInterval(kioskCountdownTimer);
+      kioskCountdownTimer = null;
+    }
+    isKioskModeActive = false;
+    if (kioskCountdownWrap) kioskCountdownWrap.style.display = 'none';
+    if (shieldVeilStandardActions) shieldVeilStandardActions.style.display = 'flex';
+    if (kioskStatusBadge) kioskStatusBadge.style.display = 'none';
+    currentRoom = '';
     stopChaffGenerator();
     closePopover();
 
@@ -2158,12 +2443,31 @@
   panicBtn.addEventListener('click', triggerPanicWipe);
 
   btnLeaveRoom.addEventListener('click', () => {
+    if (kioskCountdownTimer) {
+      clearInterval(kioskCountdownTimer);
+      kioskCountdownTimer = null;
+    }
+    isKioskModeActive = false;
+    if (kioskCountdownWrap) kioskCountdownWrap.style.display = 'none';
+    if (shieldVeilStandardActions) shieldVeilStandardActions.style.display = 'flex';
+    if (kioskStatusBadge) kioskStatusBadge.style.display = 'none';
+
+    if (document.fullscreenElement) {
+      try {
+        if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      } catch (e) {}
+    }
+
+    hideScreenShield(true);
+    if (chatWatermarkOverlay) chatWatermarkOverlay.style.backgroundImage = 'none';
     stopChaffGenerator();
     closePopover();
     if (ws) {
       ws.send(JSON.stringify({ type: 'leave', roomId: currentRoom }));
       ws.close();
     }
+    currentRoom = '';
     clearActiveSession();
     sessionMessages = [];
     window.stealthCrypto.destroy();
@@ -2395,6 +2699,13 @@
   // Hotkey Navigation & Safe Panic Trigger
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
+      // 0. If Screen Privacy Shield is visible, ESC dismisses it cleanly
+      if (screenShieldOverlay && screenShieldOverlay.style.display === 'flex') {
+        hideScreenShield(true);
+        panicPressTimes = [];
+        return;
+      }
+
       // 1. If Lightbox is open, ESC closes the lightbox WITHOUT triggering panic wipe
       if (imageLightboxModal && imageLightboxModal.style.display === 'flex') {
         imageLightboxModal.style.display = 'none';
@@ -2526,14 +2837,6 @@
 
   const btnHeaderSwapView = document.getElementById('btnHeaderSwapView');
   if (btnHeaderSwapView) btnHeaderSwapView.addEventListener('click', toggleViewSwap);
-
-  const modalLocalPipWrap = document.getElementById('modalLocalPipWrap');
-  if (modalLocalPipWrap) {
-    modalLocalPipWrap.addEventListener('click', (e) => {
-      // Single click swaps views
-      toggleViewSwap();
-    });
-  }
 
   // Fullscreen Toggle
   const btnModalFullscreen = document.getElementById('btnModalFullscreen');

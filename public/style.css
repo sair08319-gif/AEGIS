@@ -2804,3 +2804,364 @@ body {
   color: #fff !important;
   border-color: #6366f1 !important;
 }
+
+/* ==========================================================================
+   ANTI-SCREENSHOT, ANTI-CAPTURE & SCREEN PRIVACY SHIELD
+   ========================================================================== */
+.screen-shield-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 7, 12, 0.94);
+  backdrop-filter: blur(35px);
+  -webkit-backdrop-filter: blur(35px);
+  z-index: 999999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  padding: 20px;
+  user-select: none;
+  -webkit-user-select: none;
+  animation: shieldFadeIn 0.15s ease-out;
+}
+
+@keyframes shieldFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.shield-veil-card {
+  text-align: center;
+  max-width: 440px;
+  width: 90%;
+  padding: 32px 24px;
+  background: rgba(13, 17, 26, 0.95);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  border-radius: 18px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.85), 0 0 30px rgba(239, 68, 68, 0.25);
+}
+
+.shield-lock-icon {
+  margin-bottom: 16px;
+  display: inline-flex;
+  padding: 14px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  animation: pulseShield 2s infinite ease-in-out;
+}
+
+@keyframes pulseShield {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  50% { transform: scale(1.05); box-shadow: 0 0 20px 4px rgba(239, 68, 68, 0.25); }
+}
+
+.shield-veil-title {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #ef4444;
+  margin-bottom: 8px;
+}
+
+.shield-veil-desc {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-bottom: 22px;
+}
+
+.shield-resume-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #041017;
+  background: var(--accent-emerald);
+  padding: 10px 20px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.shield-resume-btn:hover {
+  background: #059669;
+  transform: translateY(-1px);
+}
+
+.shield-veil-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.shield-decoy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.08);
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.shield-decoy-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.shield-status-badge {
+  border-color: rgba(56, 189, 248, 0.3) !important;
+  background: rgba(56, 189, 248, 0.08) !important;
+}
+
+/* Deep Inactive Window & Minimized Background Blind */
+body.shield-concealed .app-container,
+body.shield-concealed .messages-viewport,
+body.shield-concealed .screen-chat,
+body.shield-concealed .video-modal-overlay,
+body.shield-concealed .floating-video-bubble,
+body.shield-concealed .whiteboard-modal,
+body.shield-concealed .whiteboard-canvas-wrap {
+  filter: blur(50px) !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Subtle Dynamic Forensic Anti-Leak Watermark */
+.chat-watermark-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0.05;
+  background-repeat: repeat;
+  background-size: 340px 170px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Hardened CSS Media Print Protection (Blanked) */
+@media print {
+  html, body {
+    background: #000 !important;
+    color: #fff !important;
+  }
+  body * {
+    display: none !important;
+    visibility: hidden !important;
+  }
+  body::before {
+    content: "AEGIS STEALTH PROTOCOL: SCREEN PRINTING & PDF EXPORT FORBIDDEN";
+    display: flex !important;
+    visibility: visible !important;
+    justify-content: center;
+    align-items: center;
+    font-size: 20pt;
+    font-weight: 800;
+    font-family: sans-serif;
+    color: #ef4444;
+    text-align: center;
+    height: 100vh;
+    padding: 40px;
+    box-sizing: border-box;
+  }
+}
+
+/* Anti-Selection & Anti-Drag for sensitive chat surfaces */
+.screen-chat,
+.messages-viewport,
+.bubble-video-wrap,
+.video-stage-inner,
+.whiteboard-canvas-wrap,
+.image-lightbox-modal {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.chat-input-box {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* ==========================================================================
+   KIOSK FULLSCREEN LOCKDOWN MODE STYLING
+   ========================================================================== */
+.kiosk-toggle-group {
+  margin-top: 6px;
+  margin-bottom: 22px;
+}
+
+.kiosk-checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+  padding: 12px 14px;
+  background: rgba(245, 158, 11, 0.06);
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  border-radius: 12px;
+  transition: var(--transition);
+  user-select: none;
+}
+
+.kiosk-checkbox-label:hover {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.45);
+}
+
+.kiosk-checkbox {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+  height: 0;
+  width: 0;
+}
+
+.kiosk-custom-box {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1.5px solid rgba(245, 158, 11, 0.5);
+  border-radius: 5px;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.kiosk-checkbox:checked ~ .kiosk-custom-box {
+  background: #f59e0b;
+  border-color: #f59e0b;
+}
+
+.kiosk-checkbox:checked ~ .kiosk-custom-box::after {
+  content: '✓';
+  color: #041017;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.kiosk-label-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.kiosk-label-title {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #fcd34d;
+  letter-spacing: 0.02em;
+}
+
+.kiosk-label-desc {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* Kiosk Countdown Modal in Screen Shield */
+.kiosk-countdown-wrap {
+  margin: 14px auto;
+  padding: 16px 20px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.38);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  animation: pulseKioskCountdown 1s infinite alternate;
+  max-width: 360px;
+  width: 100%;
+}
+
+@keyframes pulseKioskCountdown {
+  0% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.2); }
+  100% { box-shadow: 0 0 25px rgba(239, 68, 68, 0.45); }
+}
+
+.kiosk-countdown-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #ef4444;
+  text-transform: uppercase;
+}
+
+.kiosk-pulse-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ef4444;
+  box-shadow: 0 0 8px #ef4444;
+  animation: pulse-dot 0.8s infinite;
+}
+
+.kiosk-timer-circle {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.25);
+  border: 2px solid #ef4444;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.85rem;
+  font-weight: 800;
+  color: #fff;
+  font-family: var(--font-mono);
+}
+
+.kiosk-timer-desc {
+  font-size: 0.78rem;
+  color: #fecaca;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.kiosk-restore-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #fff;
+  background: #ef4444;
+  padding: 10px 22px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
+}
+
+.kiosk-restore-btn:hover {
+  background: #dc2626;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.6);
+}
+
+.kiosk-status-badge {
+  border-color: rgba(245, 158, 11, 0.35) !important;
+  background: rgba(245, 158, 11, 0.1) !important;
+}

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Aegis Stealth | Zero-Knowledge E2EE Chat</title>
-  <link rel="stylesheet" href="style.css?v=2.2">
+  <link rel="stylesheet" href="style.css?v=4.5">
   <!-- Fallback font styling when offline -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -18,6 +18,46 @@
       <div class="decoy-logo">Search Engine</div>
       <input type="text" class="decoy-input" placeholder="Search the web or type a URL..." autofocus>
       <div class="decoy-hint">Tip: Press ESC 3 times to unlock stealth console.</div>
+    </div>
+  </div>
+
+  <!-- Anti-Screenshot & Screen Privacy Shield Overlay (Snipping Tool, PrtScn & Inactivity Concealment) -->
+  <div id="screenShieldOverlay" class="screen-shield-overlay" style="display: none;">
+    <div class="shield-veil-card">
+      <div class="shield-lock-icon">
+        <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+      </div>
+      <h3 class="shield-veil-title">AEGIS PRIVACY SHIELD ACTIVE</h3>
+      <p class="shield-veil-desc" id="shieldVeilReason">Content concealed to prevent unauthorized screen capture or snip.</p>
+      
+      <!-- Kiosk Mode Self-Destruct Countdown Box -->
+      <div id="kioskCountdownWrap" class="kiosk-countdown-wrap" style="display: none;">
+        <div class="kiosk-countdown-badge">
+          <span class="kiosk-pulse-dot"></span>
+          <span>FULLSCREEN LOCKOUT DETECTED</span>
+        </div>
+        <div class="kiosk-timer-circle">
+          <span id="kioskCountdownNum">3</span>
+        </div>
+        <p class="kiosk-timer-desc">Re-enter fullscreen immediately or the room and encryption keys will be destroyed.</p>
+        <button type="button" id="btnReenterFullscreen" class="kiosk-restore-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+          <span>Re-enter Fullscreen</span>
+        </button>
+      </div>
+
+      <div class="shield-veil-actions" id="shieldVeilStandardActions">
+        <button type="button" id="btnResumeShield" class="shield-resume-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          <span>Resume Session</span>
+        </button>
+        <button type="button" id="btnSwitchToDecoy" class="shield-decoy-btn" title="Disguise as Search Engine">
+          <span>🔍 Disguise as Search</span>
+        </button>
+      </div>
     </div>
   </div>
 
@@ -83,6 +123,18 @@
           <div class="relay-secure-badge" data-tooltip="IP Privacy: GUARANTEED MASKED (Direct P2P disabled, all media routed via encrypted TURN Relay)" aria-label="IP Masked via Relay">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
             <span class="relay-badge-text">RELAY MASKED</span>
+          </div>
+
+          <!-- Anti-Capture Shield Status Dock Item -->
+          <div class="relay-secure-badge shield-status-badge" id="screenShieldBadge" data-tooltip="Screen Privacy Shield: ACTIVE (Snipping Tool blur, PrtScn purge, & Print blocked)" aria-label="Screen Shield Active">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            <span class="relay-badge-text" style="color: #38bdf8;">SCREEN SHIELD</span>
+          </div>
+
+          <!-- Kiosk Mode Status Dock Item -->
+          <div class="relay-secure-badge kiosk-status-badge" id="kioskStatusBadge" style="display: none;" data-tooltip="Kiosk Lockdown Mode: ACTIVE (Exiting Fullscreen triggers emergency wipe)" aria-label="Kiosk Mode Active">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.5"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+            <span class="relay-badge-text" style="color: #f59e0b;">KIOSK LOCKED</span>
           </div>
 
           <!-- Copy Invite Link Icon -->
@@ -156,6 +208,17 @@
             </div>
           </div>
 
+          <div class="form-group kiosk-toggle-group">
+            <label class="kiosk-checkbox-label" for="kioskModeToggle">
+              <input type="checkbox" id="kioskModeToggle" class="kiosk-checkbox">
+              <span class="kiosk-custom-box"></span>
+              <div class="kiosk-label-text">
+                <span class="kiosk-label-title">🛡️ Enforce Kiosk Fullscreen Mode</span>
+                <span class="kiosk-label-desc">Locks into fullscreen. Exiting triggers immediate blackout & 3s emergency wipe countdown.</span>
+              </div>
+            </label>
+          </div>
+
           <button type="submit" id="btnEnterRoom" class="join-btn">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
             Enter Channel
@@ -166,6 +229,9 @@
 
     <!-- SCREEN 2: SECURE CHAT INTERFACE -->
     <main id="screenChat" class="screen-chat" style="display: none;">
+      <!-- Subtle Dynamic Forensic Anti-Leak Watermark -->
+      <div id="chatWatermarkOverlay" class="chat-watermark-overlay"></div>
+
       <!-- Messages Viewport -->
       <div id="messagesViewport" class="messages-viewport"></div>
 
@@ -436,7 +502,7 @@
   <!-- Scripts -->
   <script src="crypto-js.js"></script>
   <script src="crypto.js?v=4.1"></script>
-  <script src="app.js?v=4.1"></script>
+  <script src="app.js?v=4.5"></script>
 
 
 </body>
