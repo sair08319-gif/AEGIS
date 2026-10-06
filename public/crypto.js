@@ -86,14 +86,7 @@ class StealthCrypto {
 
     const salt = CryptoJS.enc.Hex.parse(this.saltHex);
 
-    // Cross-device diagnostic log
-    console.log(
-      '%c[AEGIS CRYPTO ' + CRYPTO_ENGINE_VERSION + '] Key Derivation Inputs:',
-      'color: #10b981; font-weight: bold;',
-      '\n  Room (normalized):', JSON.stringify(normalizedRoom),
-      '\n  Pass length:', cleanPass.length,
-      '\n  Salt hex:', this.saltHex
-    );
+
 
     // Derive 512 bits (16 32-bit words)
     const derived = CryptoJS.PBKDF2(cleanPass, salt, {
@@ -106,12 +99,7 @@ class StealthCrypto {
     this.activeEncKey = CryptoJS.lib.WordArray.create(derived.words.slice(0, 8), 32);
     this.activeMacKey = CryptoJS.lib.WordArray.create(derived.words.slice(8, 16), 32);
 
-    console.log(
-      '%c[AEGIS CRYPTO] Derived key fingerprints:',
-      'color: #f59e0b; font-weight: bold;',
-      '\n  EncKey prefix:', this.activeEncKey.toString().substring(0, 16),
-      '\n  MacKey prefix:', this.activeMacKey.toString().substring(0, 16)
-    );
+
 
     return this.saltHex;
   }

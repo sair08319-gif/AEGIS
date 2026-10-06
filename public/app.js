@@ -124,11 +124,7 @@
 
   let pendingImageDataUrl = null;
 
-  // Security Alert & Shield Elements
-  const securityAlertBanner = document.getElementById('securityAlertBanner');
-  const alertTitle = document.getElementById('alertTitle');
-  const alertDetails = document.getElementById('alertDetails');
-  const btnDismissAlert = document.getElementById('btnDismissAlert');
+  // Security Shield Elements
   const shieldIndicator = document.getElementById('shieldIndicator');
   const shieldLabel = document.getElementById('shieldLabel');
   const screenShieldOverlay = document.getElementById('screenShieldOverlay');
@@ -136,7 +132,6 @@
   const btnResumeShield = document.getElementById('btnResumeShield');
   const btnSwitchToDecoy = document.getElementById('btnSwitchToDecoy');
   const chatWatermarkOverlay = document.getElementById('chatWatermarkOverlay');
-  const screenShieldBadge = document.getElementById('screenShieldBadge');
   const kioskModeToggle = document.getElementById('kioskModeToggle');
   const kioskCountdownWrap = document.getElementById('kioskCountdownWrap');
   const kioskCountdownNum = document.getElementById('kioskCountdownNum');
@@ -249,11 +244,36 @@
   let kioskCountdownTimer = null;
   let kioskSecondsLeft = 3;
 
-  const showScreenShield = (reason = 'Content concealed to prevent unauthorized screen capture or snip.', locked = false) => {
+  // Concealment & DOM Memory Stash State
+  let detachedMessagesFragment = null;
+  let stashedInputValue = '';
+  let isUndockedDevToolsOpen = false;
+
+  const isDevToolsOpen = () => {
+    // Docked DevTools detection (width or height shrinkage > 160px)
+    const widthThreshold = (window.outerWidth - window.innerWidth > 160);
+    const heightThreshold = (window.outerHeight - window.innerHeight > 160);
+    return widthThreshold || heightThreshold || isUndockedDevToolsOpen;
+  };
+
+  const showScreenShield = (reason = 'Display concealed for privacy.', locked = false) => {
     if (!screenShieldOverlay) return;
     if (shieldVeilReason) shieldVeilReason.textContent = reason;
     document.body.classList.add('shield-concealed');
     document.title = DECOY_PAGE_TITLE;
+
+    // Detach message nodes from DOM tree into memory so element inspector has zero plaintext
+    if (messagesViewport && messagesViewport.childNodes.length > 0 && !detachedMessagesFragment) {
+      detachedMessagesFragment = document.createDocumentFragment();
+      while (messagesViewport.firstChild) {
+        detachedMessagesFragment.appendChild(messagesViewport.firstChild);
+      }
+    }
+    if (messageInput && messageInput.value) {
+      stashedInputValue = messageInput.value;
+      messageInput.value = '';
+    }
+
     screenShieldOverlay.style.display = 'flex';
     if (locked) isShieldLocked = true;
   };
@@ -261,9 +281,27 @@
   const hideScreenShield = (force = false) => {
     if (!screenShieldOverlay) return;
     if (isShieldLocked && !force) return;
+
+    // Refuse to unveil if DevTools is still detected (e.g. inspector opened via browser settings)
+    if (!force && isDevToolsOpen()) {
+      return;
+    }
+
     isShieldLocked = false;
     document.body.classList.remove('shield-concealed');
     document.title = ORIGINAL_PAGE_TITLE;
+
+    // Restore detached messages back into live DOM
+    if (messagesViewport && detachedMessagesFragment) {
+      messagesViewport.appendChild(detachedMessagesFragment);
+      detachedMessagesFragment = null;
+      messagesViewport.scrollTop = messagesViewport.scrollHeight;
+    }
+    if (messageInput && stashedInputValue) {
+      messageInput.value = stashedInputValue;
+      stashedInputValue = '';
+    }
+
     screenShieldOverlay.style.display = 'none';
   };
 
@@ -369,30 +407,13 @@
     } catch (e) {}
   };
 
-  // Trigger Live Security Warning Banner
+  // Silent Security Defense Event Tracker
   const triggerSecurityAlert = (title, details) => {
     blockedAttemptsCount++;
-    alertTitle.textContent = title;
-    alertDetails.textContent = details;
-    securityAlertBanner.style.display = 'flex';
-
     if (shieldLabel) {
       shieldLabel.textContent = `BLOCKED (${blockedAttemptsCount})`;
     }
-    if (shieldIndicator) {
-      shieldIndicator.style.color = 'var(--accent-crimson)';
-      const dot = shieldIndicator.querySelector('.status-dot');
-      if (dot) dot.style.background = 'var(--accent-crimson)';
-    }
-
-    playSecurityAlarm();
   };
-
-  if (btnDismissAlert) {
-    btnDismissAlert.addEventListener('click', () => {
-      securityAlertBanner.style.display = 'none';
-    });
-  }
 
   // ACTIVE TAMPER & EXTENSION SNOOPING GUARD
   const initSecurityShield = () => {
@@ -421,10 +442,6 @@
               try {
                 node.parentNode.removeChild(node);
               } catch (e) {}
-              triggerSecurityAlert(
-                'SNOOPING EXTENSION INTERCEPTED & QUARANTINED',
-                `A browser extension attempted to inject an unauthorized element (<${tag}>) into the page. The element was immediately purged.`
-              );
             }
           }
         }
@@ -445,10 +462,6 @@
         if (e.isTrusted === false) {
           e.preventDefault();
           e.stopPropagation();
-          triggerSecurityAlert(
-            'SYNTHETIC / SCRIPTED INPUT BLOCKED',
-            'An automated script or extension attempted to simulate or read typing on an input field. The event was rejected.'
-          );
         }
       };
 
@@ -471,7 +484,7 @@
         focusUnveilTimeout = null;
       }
       if (currentRoom || isVideoCallActive) {
-        showScreenShield('WINDOW INACTIVE • CONCEALED TO PREVENT BACKGROUND CAPTURE / SNIPPING', false);
+        showScreenShield('Display concealed for privacy', false);
       }
     });
 
@@ -479,9 +492,10 @@
     // to prevent instant window-click screenshot grabbers from capturing plaintext in that frame
     window.addEventListener('focus', () => {
       if (isShieldLocked) return;
+      if (isDevToolsOpen()) return;
       if (focusUnveilTimeout) clearTimeout(focusUnveilTimeout);
       focusUnveilTimeout = setTimeout(() => {
-        if (document.hasFocus()) {
+        if (document.hasFocus() && !isDevToolsOpen()) {
           hideScreenShield(false);
         }
       }, 350);
@@ -489,11 +503,12 @@
 
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden' && (currentRoom || isVideoCallActive)) {
-        showScreenShield('MINIMIZED / BACKGROUND TAB • SECURE CONCEALMENT ACTIVE', false);
+        showScreenShield('Display concealed for privacy', false);
       } else if (document.visibilityState === 'visible' && !isShieldLocked) {
+        if (isDevToolsOpen()) return;
         if (focusUnveilTimeout) clearTimeout(focusUnveilTimeout);
         focusUnveilTimeout = setTimeout(() => {
-          if (document.hasFocus()) {
+          if (document.hasFocus() && !isDevToolsOpen()) {
             hideScreenShield(false);
           }
         }, 350);
@@ -503,48 +518,43 @@
     // 4. Hardware PrintScreen Key Interception & OS Clipboard Purge
     window.addEventListener('keyup', (e) => {
       if (e.key === 'PrintScreen' || e.code === 'PrintScreen' || e.keyCode === 44) {
-        showScreenShield('HARDWARE PRINTSCREEN / SNAPSHOT DETECTED • CONTENT CONCEALED', true);
+        showScreenShield('Display concealed for privacy', true);
         purgeClipboard();
-        triggerSecurityAlert(
-          'SCREENSHOT ATTEMPT INTERCEPTED',
-          'Hardware PrintScreen key was pressed. Screen was immediately blanked and OS clipboard was purged.'
-        );
       }
     });
 
-    // 5. Intercept Print (Ctrl+P / Cmd+P), Save Page (Ctrl+S / Cmd+S), and DevTools Shortcuts
+    // 5. Silent Interception of Print (Ctrl+P), Save Page (Ctrl+S), View Source (Ctrl+U) and DevTools Shortcuts
     window.addEventListener('keydown', (e) => {
       const isCtrlOrCmd = e.ctrlKey || e.metaKey;
 
       if (isCtrlOrCmd && (e.key === 'p' || e.key === 'P')) {
         e.preventDefault();
         e.stopPropagation();
-        showScreenShield('PRINTING FORBIDDEN • DISPLAY CONCEALED', true);
-        triggerSecurityAlert('PRINT ATTEMPT BLOCKED', 'Printing and PDF export are strictly forbidden in Aegis.');
+        showScreenShield('Display concealed for privacy', true);
         return;
       }
 
       if (isCtrlOrCmd && (e.key === 's' || e.key === 'S')) {
         e.preventDefault();
         e.stopPropagation();
-        triggerSecurityAlert('SAVE WEBPAGE BLOCKED', 'Saving raw webpage assets to disk is disabled.');
         return;
       }
 
       if (
         e.key === 'F12' ||
-        (isCtrlOrCmd && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j' || e.key === 'C' || e.key === 'c'))
+        (isCtrlOrCmd && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j' || e.key === 'C' || e.key === 'c')) ||
+        (isCtrlOrCmd && (e.key === 'u' || e.key === 'U'))
       ) {
         e.preventDefault();
         e.stopPropagation();
-        triggerSecurityAlert('DEVTOOLS INSPECTOR BLOCKED', 'DOM inspection and developer console shortcuts are restricted.');
-        return;
+        return false;
       }
     });
 
     // 6. Resume Shield Button Listener
     if (btnResumeShield) {
       btnResumeShield.addEventListener('click', () => {
+        if (isDevToolsOpen()) return;
         hideScreenShield(true);
       });
     }
@@ -558,24 +568,39 @@
       });
     }
 
-    // 7. Anti-Context Menu (Right-Click) on Sensitive Elements
-    const sensitiveContainers = [
-      screenChat,
-      messagesViewport,
-      videoCallModal,
-      floatingVideoBubble,
-      imageLightboxModal,
-      whiteboardModal || document.getElementById('whiteboardModal')
-    ];
+    // 7. Global Anti-Inspect Context Menu Guard (Disables right-click everywhere; allows message box paste)
+    document.addEventListener('contextmenu', (e) => {
+      if (e.target && e.target === messageInput) return;
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    }, true);
 
-    sensitiveContainers.forEach(container => {
-      if (container) {
-        container.addEventListener('contextmenu', (e) => {
-          if (e.target === messageInput) return; // Allow right-click paste in message text input
-          e.preventDefault();
-        });
+    // 8. Continuous Docked & Undocked DevTools Detection (protects even when DevTools is opened from browser settings / menu)
+    const detectDevTools = () => {
+      if (!currentRoom && !isVideoCallActive) return;
+      if (isDevToolsOpen()) {
+        showScreenShield('Display concealed for privacy', false);
       }
-    });
+    };
+    window.addEventListener('resize', detectDevTools);
+    setInterval(detectDevTools, 400);
+
+    // Continuous debugger timing check (traps DevTools opened via browser settings / menu)
+    const checkDebuggerTrap = () => {
+      if (!currentRoom && !isVideoCallActive) return;
+      const t0 = performance.now();
+      // eslint-disable-next-line no-debugger
+      debugger;
+      const t1 = performance.now();
+      if (t1 - t0 > 100) {
+        isUndockedDevToolsOpen = true;
+        showScreenShield('Display concealed for privacy', true);
+      } else {
+        isUndockedDevToolsOpen = false;
+      }
+    };
+    setInterval(checkDebuggerTrap, 1000);
 
     // 8. Anti-Drag on Images
     document.addEventListener('dragstart', (e) => {
@@ -615,7 +640,7 @@
 
   // Run Shield immediately
   initSecurityShield();
-  console.log('%c[AEGIS] Client App v4.6 loaded (Anti-Screenshot & Kiosk Active)', 'color: #38bdf8; font-weight: bold;');
+  console.log('%c[AEGIS] Client App v4.9 loaded (Stealth & Anti-Inspect Active)', 'color: #38bdf8; font-weight: bold;');
 
   // Codename & Room Generators
   const generateCodename = () => {
@@ -997,67 +1022,70 @@
 
   // Note: Direct P2P option has been permanently replaced by mandatory Encrypted TURN Relay for total IP anonymity.
 
-    // Active Peers List Trigger
-  if (btnActivePeers) {
-    btnActivePeers.addEventListener('click', () => {
-      if (!peersModal || !peersListContainer) return;
-      peersListContainer.innerHTML = '';
+  function renderActivePeersList() {
+    if (!peersModal || !peersListContainer) return;
+    peersListContainer.innerHTML = '';
 
-      const listToShow = (activePeersList && activePeersList.length > 0)
-        ? activePeersList
-        : [codename];
+    const listToShow = (activePeersList && activePeersList.length > 0)
+      ? activePeersList
+      : [codename];
 
-      // Section 1: Chat Peers
-      const chatHeader = document.createElement('div');
-      chatHeader.style.cssText = 'font-size: 0.72rem; font-weight: 700; color: #10b981; letter-spacing: 0.05em; margin: 4px 0 6px 2px; text-transform: uppercase; display: flex; justify-content: space-between; align-items: center;';
-      chatHeader.innerHTML = `<span>💬 Text Chat Members</span><span style="background: rgba(16,185,129,0.15); padding: 1px 7px; border-radius: 999px;">${activeChatPeers.length || 1}</span>`;
-      peersListContainer.appendChild(chatHeader);
+    // Section 1: Chat Peers
+    const chatHeader = document.createElement('div');
+    chatHeader.style.cssText = 'font-size: 0.72rem; font-weight: 700; color: #10b981; letter-spacing: 0.05em; margin: 4px 0 6px 2px; text-transform: uppercase; display: flex; justify-content: space-between; align-items: center;';
+    chatHeader.innerHTML = `<span>💬 Text Chat Members</span><span style="background: rgba(16,185,129,0.15); padding: 1px 7px; border-radius: 999px;">${activeChatPeers.length || 1}</span>`;
+    peersListContainer.appendChild(chatHeader);
 
-      const chatList = (activeChatPeers && activeChatPeers.length > 0) ? activeChatPeers : [codename];
-      chatList.forEach(name => {
+    const chatList = (activeChatPeers && activeChatPeers.length > 0) ? activeChatPeers : [codename];
+    chatList.forEach(name => {
+      const item = document.createElement('div');
+      item.className = 'peer-item-card';
+      const isYou = (name === myEphemeralPeerId || name === codename);
+      const displayName = isYou ? codename : (peerCodenames.get(name) || name);
+      item.innerHTML = `
+        <div class="peer-name-wrap">
+          <span style="font-size: 1.1rem;">👤</span>
+          <span style="font-weight: 600;">${escapeHtml(displayName)}</span>
+        </div>
+        ${isYou ? '<span class="peer-badge-you">YOU</span>' : '<span style="color: #34d399; font-size: 0.72rem; font-weight: 600;">● In Chat</span>'}
+      `;
+      peersListContainer.appendChild(item);
+    });
+
+    // Section 2: Video Callers
+    const videoHeader = document.createElement('div');
+    videoHeader.style.cssText = 'font-size: 0.72rem; font-weight: 700; color: #06b6d4; letter-spacing: 0.05em; margin: 14px 0 6px 2px; text-transform: uppercase; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 10px; display: flex; justify-content: space-between; align-items: center;';
+    videoHeader.innerHTML = `<span>📹 Active in Video Call</span><span style="background: rgba(6,182,212,0.15); padding: 1px 7px; border-radius: 999px;">${activeVideoPeers.length}</span>`;
+    peersListContainer.appendChild(videoHeader);
+
+    if (activeVideoPeers.length === 0) {
+      const emptyNote = document.createElement('div');
+      emptyNote.style.cssText = 'font-size: 0.75rem; color: var(--text-muted); font-style: italic; padding: 6px 10px; background: rgba(255,255,255,0.02); border-radius: 8px;';
+      emptyNote.textContent = 'No peers are currently in video call.';
+      peersListContainer.appendChild(emptyNote);
+    } else {
+      activeVideoPeers.forEach(name => {
         const item = document.createElement('div');
         item.className = 'peer-item-card';
         const isYou = (name === myEphemeralPeerId || name === codename);
         const displayName = isYou ? codename : (peerCodenames.get(name) || name);
         item.innerHTML = `
           <div class="peer-name-wrap">
-            <span style="font-size: 1.1rem;">👤</span>
+            <span style="font-size: 1.1rem;">🎥</span>
             <span style="font-weight: 600;">${escapeHtml(displayName)}</span>
           </div>
-          ${isYou ? '<span class="peer-badge-you">YOU</span>' : '<span style="color: #34d399; font-size: 0.72rem; font-weight: 600;">● In Chat</span>'}
+          <span style="color: #06b6d4; font-size: 0.72rem; font-weight: 600;">${isYou ? 'YOU (In Call)' : '● In Call'}</span>
         `;
         peersListContainer.appendChild(item);
       });
+    }
+  }
 
-      // Section 2: Video Callers
-      const videoHeader = document.createElement('div');
-      videoHeader.style.cssText = 'font-size: 0.72rem; font-weight: 700; color: #06b6d4; letter-spacing: 0.05em; margin: 14px 0 6px 2px; text-transform: uppercase; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 10px; display: flex; justify-content: space-between; align-items: center;';
-      videoHeader.innerHTML = `<span>📹 Active in Video Call</span><span style="background: rgba(6,182,212,0.15); padding: 1px 7px; border-radius: 999px;">${activeVideoPeers.length}</span>`;
-      peersListContainer.appendChild(videoHeader);
-
-      if (activeVideoPeers.length === 0) {
-        const emptyNote = document.createElement('div');
-        emptyNote.style.cssText = 'font-size: 0.75rem; color: var(--text-muted); font-style: italic; padding: 6px 10px; background: rgba(255,255,255,0.02); border-radius: 8px;';
-        emptyNote.textContent = 'No peers are currently in video call.';
-        peersListContainer.appendChild(emptyNote);
-      } else {
-        activeVideoPeers.forEach(name => {
-          const item = document.createElement('div');
-          item.className = 'peer-item-card';
-          const isYou = (name === myEphemeralPeerId || name === codename);
-        const displayName = isYou ? codename : (peerCodenames.get(name) || name);
-          item.innerHTML = `
-            <div class="peer-name-wrap">
-              <span style="font-size: 1.1rem;">🎥</span>
-              <span style="font-weight: 600;">${escapeHtml(displayName)}</span>
-            </div>
-            <span style="color: #06b6d4; font-size: 0.72rem; font-weight: 600;">${isYou ? 'YOU (In Call)' : '● In Call'}</span>
-          `;
-          peersListContainer.appendChild(item);
-        });
-      }
-
-      peersModal.style.display = 'flex';
+  // Active Peers List Trigger
+  if (btnActivePeers) {
+    btnActivePeers.addEventListener('click', () => {
+      renderActivePeersList();
+      if (peersModal) peersModal.style.display = 'flex';
     });
   }
 
@@ -1916,6 +1944,9 @@
                 }
               }
             }
+            if (peersModal && peersModal.style.display === 'flex') {
+              renderActivePeersList();
+            }
             break;
           }
 
@@ -2036,7 +2067,9 @@
         if (!data.isAck) {
           sendEncryptedPresenceAnnouncement(true);
         }
-        if (renderActivePeersList) renderActivePeersList();
+        if (typeof renderActivePeersList === 'function' && peersModal && peersModal.style.display === 'flex') {
+          renderActivePeersList();
+        }
         return;
       }
 
@@ -2258,8 +2291,12 @@
       }
     }
 
-    messagesViewport.appendChild(row);
-    messagesViewport.scrollTop = messagesViewport.scrollHeight;
+    if (detachedMessagesFragment) {
+      detachedMessagesFragment.appendChild(row);
+    } else {
+      messagesViewport.appendChild(row);
+      messagesViewport.scrollTop = messagesViewport.scrollHeight;
+    }
 
     // Auto-Burn: Total Erasure from RAM, DOM, and Inspector
     if (burnSeconds > 0) {
@@ -2375,6 +2412,8 @@
     window.stealthCrypto.destroy();
     seenAuthTags.clear();
     messagesViewport.innerHTML = '';
+    detachedMessagesFragment = null;
+    stashedInputValue = '';
     messageInput.value = '';
     passphraseInput.value = '';
     roomInput.value = '';
@@ -2482,6 +2521,8 @@
     window.stealthCrypto.destroy();
     seenAuthTags.clear();
     messagesViewport.innerHTML = '';
+    detachedMessagesFragment = null;
+    stashedInputValue = '';
     screenChat.style.display = 'none';
     if (chatHeaderInfo) chatHeaderInfo.style.display = 'none';
     if (chatActionGroup) chatActionGroup.style.display = 'none';

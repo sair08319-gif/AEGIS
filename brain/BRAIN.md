@@ -132,6 +132,22 @@ All 8 identified flaws and architectural gaps have been resolved:
 * **Files:** `public/app.js`, `public/index.html`
 * **Fix Applied:** Moved `whiteboardModal` and associated canvas element declarations to the top of the closure alongside other modal elements, hoisted `showToast`, `triggerWipe`, and `triggerPanicWipe` function declarations, and bumped cache-buster to `v=4.6`.
 
+### 15. `renderActivePeersList` Inbound Presence ReferenceError (Fixed ✅ - v4.7)
+* **Files:** `public/app.js`, `public/index.html`
+* **Fix Applied:** Extracted `renderActivePeersList` into a hoisted top-level function declaration, guarded presence announcement calls with modal visibility checks, and resolved false-positive inbound decryption failure warnings. Bumped cache-buster to `v=4.7`.
+
+### 16. Silent DevTools Defense, Badge Removal & Inspector Cloaking (Implemented ✅ - v4.9)
+* **Files:** `public/app.js`, `public/index.html`, `public/style.css`, `public/crypto.js`
+* **Defenses Implemented:**
+  - **Badge Removal:** Removed `RELAY MASKED` and `SCREEN SHIELD` badges from the header dock to eliminate visual clutter and avoid drawing attention to stealth mechanisms.
+  - **Zero-Warning Silent Defense:** Completely removed `#securityAlertBanner` and silenced alert audio chirps. All inspection attempts, DevTools shortcuts (`F12`, `Ctrl+Shift+I/J/C`, `Ctrl+U`), and right-clicks fail completely silently without noisy banners or alarms.
+  - **Browser Settings / Menu DevTools Trap:** Even if a user opens DevTools from browser settings/menu (bypassing shortcut blockers):
+    - Continuous viewport shrinkage monitoring (`outerWidth - innerWidth > 160 || outerHeight - innerHeight > 160`) detects docked DevTools.
+    - Continuous `debugger` timing loop halts execution in the debugger when DevTools is opened, preventing live element or script inspection.
+    - When veiled, message rows are detached from the DOM tree into an in-memory `DocumentFragment` (`detachedMessagesFragment`), ensuring that even when inspecting the DOM in the Elements panel, `<div id="messagesViewport">` contains zero plaintext nodes.
+    - Refuses to unveil if DevTools is still detected.
+  - **Crypto Diagnostic Purge:** Stripped all key derivation diagnostic logs from `crypto.js` to eliminate console leaks. Bumped asset versions to `v=4.9`.
+
 ---
 
 ## 🚀 How to Run and Test

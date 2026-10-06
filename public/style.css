@@ -2921,9 +2921,10 @@ body {
   border-color: rgba(255, 255, 255, 0.3);
 }
 
-.shield-status-badge {
-  border-color: rgba(56, 189, 248, 0.3) !important;
-  background: rgba(56, 189, 248, 0.08) !important;
+.relay-secure-badge,
+.shield-status-badge,
+.security-alert-banner {
+  display: none !important;
 }
 
 /* Deep Inactive Window & Minimized Background Blind */
@@ -2938,6 +2939,14 @@ body.shield-concealed .whiteboard-canvas-wrap {
   opacity: 0 !important;
   visibility: hidden !important;
   pointer-events: none !important;
+}
+
+body.shield-concealed .msg-row,
+body.shield-concealed .msg-bubble,
+body.shield-concealed .msg-text,
+body.shield-concealed .msg-image-wrap {
+  display: none !important;
+  visibility: hidden !important;
 }
 
 /* Subtle Dynamic Forensic Anti-Leak Watermark */
@@ -3162,6 +3171,18 @@ body.shield-concealed .whiteboard-canvas-wrap {
 }
 
 .kiosk-status-badge {
-  border-color: rgba(245, 158, 11, 0.35) !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  user-select: none;
+  cursor: default;
+  transition: all 0.2s ease;
+  border: 1px solid rgba(245, 158, 11, 0.35) !important;
   background: rgba(245, 158, 11, 0.1) !important;
+  color: #f59e0b;
 }

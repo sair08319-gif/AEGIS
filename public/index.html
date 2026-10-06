@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Aegis Stealth | Zero-Knowledge E2EE Chat</title>
-  <link rel="stylesheet" href="style.css?v=4.6">
+  <link rel="stylesheet" href="style.css?v=4.9">
   <!-- Fallback font styling when offline -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -30,8 +30,8 @@
           <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
         </svg>
       </div>
-      <h3 class="shield-veil-title">AEGIS PRIVACY SHIELD ACTIVE</h3>
-      <p class="shield-veil-desc" id="shieldVeilReason">Content concealed to prevent unauthorized screen capture or snip.</p>
+      <h3 class="shield-veil-title">SESSION CONCEALED</h3>
+      <p class="shield-veil-desc" id="shieldVeilReason">Display concealed for privacy.</p>
       
       <!-- Kiosk Mode Self-Destruct Countdown Box -->
       <div id="kioskCountdownWrap" class="kiosk-countdown-wrap" style="display: none;">
@@ -119,20 +119,10 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><line x1="2" y1="2" x2="8" y2="8"/></svg>
           </button>
 
-          <!-- IP Privacy: Permanent Relay Masking (P2P Disabled) -->
-          <div class="relay-secure-badge" data-tooltip="IP Privacy: GUARANTEED MASKED (Direct P2P disabled, all media routed via encrypted TURN Relay)" aria-label="IP Masked via Relay">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            <span class="relay-badge-text">RELAY MASKED</span>
-          </div>
 
-          <!-- Anti-Capture Shield Status Dock Item -->
-          <div class="relay-secure-badge shield-status-badge" id="screenShieldBadge" data-tooltip="Screen Privacy Shield: ACTIVE (Snipping Tool blur, PrtScn purge, & Print blocked)" aria-label="Screen Shield Active">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            <span class="relay-badge-text" style="color: #38bdf8;">SCREEN SHIELD</span>
-          </div>
 
           <!-- Kiosk Mode Status Dock Item -->
-          <div class="relay-secure-badge kiosk-status-badge" id="kioskStatusBadge" style="display: none;" data-tooltip="Kiosk Lockdown Mode: ACTIVE (Exiting Fullscreen triggers emergency wipe)" aria-label="Kiosk Mode Active">
+          <div class="kiosk-status-badge" id="kioskStatusBadge" style="display: none;" data-tooltip="Kiosk Lockdown Mode: ACTIVE (Exiting Fullscreen triggers emergency wipe)" aria-label="Kiosk Mode Active">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.5"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
             <span class="relay-badge-text" style="color: #f59e0b;">KIOSK LOCKED</span>
           </div>
@@ -151,17 +141,7 @@
       </div>
     </header>
 
-    <!-- Real-Time Security Warning Alert Banner -->
-    <div id="securityAlertBanner" class="security-alert-banner" style="display: none;">
-      <div class="alert-content">
-        <span class="alert-icon">🚨</span>
-        <div class="alert-text">
-          <strong id="alertTitle">SNOOPING ATTEMPT BLOCKED!</strong>
-          <span id="alertDetails">A browser extension or external script attempted to read or inject into the chat DOM. The attempt was quarantined.</span>
-        </div>
-      </div>
-      <button type="button" id="btnDismissAlert" class="alert-close-btn">✕ Dismiss</button>
-    </div>
+
 
     <!-- SCREEN 1: LOBBY / SETUP -->
     <main id="screenLobby" class="screen-lobby">
@@ -331,7 +311,7 @@
         <span class="brand-dot-pulse"></span>
         <span class="video-modal-title">AEGIS SECURE VIDEO</span>
         <span id="modalRoomBadge" class="modal-room-badge"></span>
-        <span id="modalQualityBadge" class="modal-quality-badge" title="Connection Mode">🛡️ RELAY • HD 720p • MASKED</span>
+        <span id="modalQualityBadge" class="modal-quality-badge" title="Connection Mode">🔒 HD 720p</span>
         <div id="remoteSpeakingIndicator" class="speaking-indicator" style="display: none;" title="Peer Speaking">
           <span class="wave-bar"></span>
           <span class="wave-bar"></span>
@@ -501,8 +481,8 @@
 
   <!-- Scripts -->
   <script src="crypto-js.js"></script>
-  <script src="crypto.js?v=4.1"></script>
-  <script src="app.js?v=4.6"></script>
+  <script src="crypto.js?v=4.9"></script>
+  <script src="app.js?v=4.9"></script>
 
 
 </body>
