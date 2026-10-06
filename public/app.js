@@ -244,36 +244,11 @@
   let kioskCountdownTimer = null;
   let kioskSecondsLeft = 3;
 
-  // Concealment & DOM Memory Stash State
-  let detachedMessagesFragment = null;
-  let stashedInputValue = '';
-  let isUndockedDevToolsOpen = false;
-
-  const isDevToolsOpen = () => {
-    // Docked DevTools detection (width or height shrinkage > 160px)
-    const widthThreshold = (window.outerWidth - window.innerWidth > 160);
-    const heightThreshold = (window.outerHeight - window.innerHeight > 160);
-    return widthThreshold || heightThreshold || isUndockedDevToolsOpen;
-  };
-
   const showScreenShield = (reason = 'Display concealed for privacy.', locked = false) => {
     if (!screenShieldOverlay) return;
     if (shieldVeilReason) shieldVeilReason.textContent = reason;
     document.body.classList.add('shield-concealed');
     document.title = DECOY_PAGE_TITLE;
-
-    // Detach message nodes from DOM tree into memory so element inspector has zero plaintext
-    if (messagesViewport && messagesViewport.childNodes.length > 0 && !detachedMessagesFragment) {
-      detachedMessagesFragment = document.createDocumentFragment();
-      while (messagesViewport.firstChild) {
-        detachedMessagesFragment.appendChild(messagesViewport.firstChild);
-      }
-    }
-    if (messageInput && messageInput.value) {
-      stashedInputValue = messageInput.value;
-      messageInput.value = '';
-    }
-
     screenShieldOverlay.style.display = 'flex';
     if (locked) isShieldLocked = true;
   };
@@ -281,27 +256,9 @@
   const hideScreenShield = (force = false) => {
     if (!screenShieldOverlay) return;
     if (isShieldLocked && !force) return;
-
-    // Refuse to unveil if DevTools is still detected (e.g. inspector opened via browser settings)
-    if (!force && isDevToolsOpen()) {
-      return;
-    }
-
     isShieldLocked = false;
     document.body.classList.remove('shield-concealed');
     document.title = ORIGINAL_PAGE_TITLE;
-
-    // Restore detached messages back into live DOM
-    if (messagesViewport && detachedMessagesFragment) {
-      messagesViewport.appendChild(detachedMessagesFragment);
-      detachedMessagesFragment = null;
-      messagesViewport.scrollTop = messagesViewport.scrollHeight;
-    }
-    if (messageInput && stashedInputValue) {
-      messageInput.value = stashedInputValue;
-      stashedInputValue = '';
-    }
-
     screenShieldOverlay.style.display = 'none';
   };
 
@@ -492,10 +449,9 @@
     // to prevent instant window-click screenshot grabbers from capturing plaintext in that frame
     window.addEventListener('focus', () => {
       if (isShieldLocked) return;
-      if (isDevToolsOpen()) return;
       if (focusUnveilTimeout) clearTimeout(focusUnveilTimeout);
       focusUnveilTimeout = setTimeout(() => {
-        if (document.hasFocus() && !isDevToolsOpen()) {
+        if (document.hasFocus()) {
           hideScreenShield(false);
         }
       }, 350);
@@ -505,10 +461,9 @@
       if (document.visibilityState === 'hidden' && (currentRoom || isVideoCallActive)) {
         showScreenShield('Display concealed for privacy', false);
       } else if (document.visibilityState === 'visible' && !isShieldLocked) {
-        if (isDevToolsOpen()) return;
         if (focusUnveilTimeout) clearTimeout(focusUnveilTimeout);
         focusUnveilTimeout = setTimeout(() => {
-          if (document.hasFocus() && !isDevToolsOpen()) {
+          if (document.hasFocus()) {
             hideScreenShield(false);
           }
         }, 350);
@@ -554,7 +509,6 @@
     // 6. Resume Shield Button Listener
     if (btnResumeShield) {
       btnResumeShield.addEventListener('click', () => {
-        if (isDevToolsOpen()) return;
         hideScreenShield(true);
       });
     }
@@ -576,31 +530,15 @@
       return false;
     }, true);
 
-    // 8. Continuous Docked & Undocked DevTools Detection (protects even when DevTools is opened from browser settings / menu)
+    // 8. Docked DevTools Detection (protects when DevTools is opened from browser settings / menu)
     const detectDevTools = () => {
       if (!currentRoom && !isVideoCallActive) return;
-      if (isDevToolsOpen()) {
+      const isDocked = (window.outerWidth - window.innerWidth > 180) || (window.outerHeight - window.innerHeight > 180);
+      if (isDocked) {
         showScreenShield('Display concealed for privacy', false);
       }
     };
     window.addEventListener('resize', detectDevTools);
-    setInterval(detectDevTools, 400);
-
-    // Continuous debugger timing check (traps DevTools opened via browser settings / menu)
-    const checkDebuggerTrap = () => {
-      if (!currentRoom && !isVideoCallActive) return;
-      const t0 = performance.now();
-      // eslint-disable-next-line no-debugger
-      debugger;
-      const t1 = performance.now();
-      if (t1 - t0 > 100) {
-        isUndockedDevToolsOpen = true;
-        showScreenShield('Display concealed for privacy', true);
-      } else {
-        isUndockedDevToolsOpen = false;
-      }
-    };
-    setInterval(checkDebuggerTrap, 1000);
 
     // 8. Anti-Drag on Images
     document.addEventListener('dragstart', (e) => {
@@ -640,7 +578,7 @@
 
   // Run Shield immediately
   initSecurityShield();
-  console.log('%c[AEGIS] Client App v4.9 loaded (Stealth & Anti-Inspect Active)', 'color: #38bdf8; font-weight: bold;');
+  console.log('%c[AEGIS] Client App v5.0 loaded (Stealth Active)', 'color: #38bdf8; font-weight: bold;');
 
   // Codename & Room Generators
   const generateCodename = () => {
@@ -1870,6 +1808,10 @@
 
     ws = new WebSocket(wsUrl);
 
+    ws.onerror = (err) => {
+      console.warn('[AEGIS WS] Socket error encountered:', err);
+    };
+
     ws.onopen = () => {
       isWsReconnecting = false;
       if (cryptoStatusLabel) cryptoStatusLabel.textContent = 'SECURE (E2EE)';
@@ -2008,12 +1950,13 @@
       if (statusDot) statusDot.style.background = 'var(--accent-crimson)';
 
       // Auto-reconnect if inside an active room
-      if (currentRoom && !isWsReconnecting) {
-        isWsReconnecting = true;
+      if (currentRoom) {
+        if (wsReconnectTimer) clearTimeout(wsReconnectTimer);
         wsReconnectTimer = setTimeout(() => {
+          if (!currentRoom) return;
           console.log('[AEGIS] Auto-reconnecting to relay...');
           connectRelay(blindedRoomId || currentRoom);
-        }, 1500);
+        }, 2000);
       }
     };
   };
@@ -2291,12 +2234,8 @@
       }
     }
 
-    if (detachedMessagesFragment) {
-      detachedMessagesFragment.appendChild(row);
-    } else {
-      messagesViewport.appendChild(row);
-      messagesViewport.scrollTop = messagesViewport.scrollHeight;
-    }
+    messagesViewport.appendChild(row);
+    messagesViewport.scrollTop = messagesViewport.scrollHeight;
 
     // Auto-Burn: Total Erasure from RAM, DOM, and Inspector
     if (burnSeconds > 0) {
@@ -2412,8 +2351,6 @@
     window.stealthCrypto.destroy();
     seenAuthTags.clear();
     messagesViewport.innerHTML = '';
-    detachedMessagesFragment = null;
-    stashedInputValue = '';
     messageInput.value = '';
     passphraseInput.value = '';
     roomInput.value = '';
@@ -2521,8 +2458,6 @@
     window.stealthCrypto.destroy();
     seenAuthTags.clear();
     messagesViewport.innerHTML = '';
-    detachedMessagesFragment = null;
-    stashedInputValue = '';
     screenChat.style.display = 'none';
     if (chatHeaderInfo) chatHeaderInfo.style.display = 'none';
     if (chatActionGroup) chatActionGroup.style.display = 'none';

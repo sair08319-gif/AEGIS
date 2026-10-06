@@ -148,6 +148,19 @@ All 8 identified flaws and architectural gaps have been resolved:
     - Refuses to unveil if DevTools is still detected.
   - **Crypto Diagnostic Purge:** Stripped all key derivation diagnostic logs from `crypto.js` to eliminate console leaks. Bumped asset versions to `v=4.9`.
 
+### 17. WebSocket Reconnect Stability & Debugger Freeze Removal (Fixed ✅ - v5.0)
+* **Files:** `public/app.js`, `public/index.html`
+* **Root Cause:** 
+  1. `checkDebuggerTrap` ran `debugger;` on an interval whenever DevTools was open, halting Chrome's V8 thread ("Paused in debugger"). This caused the WebSocket heartbeat ping to stall and the server/proxy to time out (`net::ERR_CONNECTION_TIMED_OUT`).
+  2. `isWsReconnecting` was locked to `true` after the first disconnect attempt, preventing any further reconnect attempts if the initial retry timed out.
+  3. `detachedMessagesFragment` removed message rows from the DOM on shield, and `hideScreenShield` refused to restore them when `isDevToolsOpen()` returned true, stranding incoming messages.
+* **Fix Applied:**
+  - Completely purged `debugger;` statements and removed `checkDebuggerTrap`.
+  - Removed `detachedMessagesFragment` DOM detaching; restored direct, reliable message rendering into `messagesViewport`.
+  - Added robust WebSocket auto-reconnect with continuous retries and `ws.onerror` logging.
+  - Allowed `hideScreenShield(true)` to cleanly restore session when "Resume Session" is clicked without false rejection.
+  - Bumped asset cache-busters to `v=5.0`.
+
 ---
 
 ## 🚀 How to Run and Test
