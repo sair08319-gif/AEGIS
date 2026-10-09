@@ -1,14 +1,23 @@
 # 🧠 Aegis Stealth Chat — Central Brain & Conversation Continuity
 
 > **Quick Resume Prompt for Any New AI Session:**
-> *"Resume Aegis Stealth Chat. Read `Z:\secure-stealth-chat\brain\BRAIN.md` and continue from the latest task."*
+> *"Resume Aegis Stealth Chat. Read `Z:\secure-stealth-chat - Copy\brain\BRAIN.md` and continue. STRICT ISOLATION: The user has other projects on drive Z: (e.g. UDF_SUBDOMAINS). NEVER inspect, read, or refer to any project outside of secure-stealth-chat."*
+
+---
+
+## 🚨 Critical Boundary: Strict Workspace Isolation
+* **Active Project:** **Aegis Stealth Chat** (`sair08319-gif/AEGIS`)
+* **Primary Directory:** `Z:\secure-stealth-chat - Copy` (and backup `Z:\secure-stealth-chat`)
+* **Live Production:** `https://836706601.online` (Render: `https://aegis-3asi.onrender.com`)
+* **STRICT ISOLATION MANDATE:** Do **NOT** read, inspect, modify, or mention any other projects on `Z:\` (e.g., `UDF_SUBDOMAINS`, `net-notch`, etc.). Focus 100% strictly on Aegis Stealth Chat.
 
 ---
 
 ## 📌 Project Overview
 **Aegis Stealth** is a zero-knowledge, mathematically irreversible, client-side end-to-end encrypted (E2EE) communication system designed to run locally, over Wi-Fi/Mobile Hotspots, or via Cloudflare Tunnels without any server-side database or logging.
 
-* **Primary Project Directory:** `Z:\secure-stealth-chat`
+* **Primary Project Directory:** `Z:\secure-stealth-chat - Copy`
+* **Backup Directory:** `Z:\secure-stealth-chat`
 * **Scratch / Backup Directory:** `C:\Users\muthy\.gemini\antigravity-ide\scratch\secure-stealth-chat`
 * **Port:** `3000` (or `process.env.PORT`)
 * **Transport:** HTTP / WebSocket (`ws://` or `wss://`)
