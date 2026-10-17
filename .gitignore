@@ -4,3 +4,4 @@ package-lock.json
 Thumbs.db
 *.log
 .env
+brain/

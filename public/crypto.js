@@ -44,17 +44,34 @@ class StealthCrypto {
     return result;
   }
 
-  // Generate random padding noise
+  // Generate random padding noise with rejection sampling to eliminate modulo bias
   static generateNoise(length) {
     if (length <= 0) return '';
     const charset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    const charsetLen = charset.length;
+    const maxValid = 256 - (256 % charsetLen); // 248 (reject >= 248 to prevent modulo bias)
     let out = '';
-    const vals = new Uint8Array(length);
+    
     if (window.crypto && window.crypto.getRandomValues) {
-      window.crypto.getRandomValues(vals);
-      for (let i = 0; i < length; i++) out += charset[vals[i] % charset.length];
+      while (out.length < length) {
+        const needed = length - out.length;
+        const buf = new Uint8Array(Math.max(needed * 2, 16));
+        window.crypto.getRandomValues(buf);
+        for (let i = 0; i < buf.length && out.length < length; i++) {
+          if (buf[i] < maxValid) {
+            out += charset[buf[i] % charsetLen];
+          }
+        }
+      }
     } else {
-      for (let i = 0; i < length; i++) out += charset[Math.floor(Math.random() * charset.length)];
+      const words = CryptoJS.lib.WordArray.random(Math.max(length * 2, 16));
+      const hex = words.toString();
+      for (let i = 0; i < hex.length - 1 && out.length < length; i += 2) {
+        const byte = parseInt(hex.substr(i, 2), 16);
+        if (byte < maxValid) {
+          out += charset[byte % charsetLen];
+        }
+      }
     }
     return out;
   }
@@ -67,10 +84,9 @@ class StealthCrypto {
   }
 
   /**
-   * Derive 512 bits using PBKDF2 (30,000 rounds)
-   * Enforces Cryptographic Key Separation:
-   * - First 256 bits = AES-256 Encryption Key
-   * - Second 256 bits = HMAC-SHA256 Authentication Key
+   * Derive single 256-bit Master Key via PBKDF2 (60,000 rounds)
+   * and expand EncKey & MacKey via HMAC-SHA256 (HKDF-Expand).
+   * Eliminates the Block-2 work factor halving flaw (BUG-10).
    */
   async initializeKey(passphrase, roomId) {
     // Canonical NFC Unicode & whitespace normalization
@@ -86,20 +102,16 @@ class StealthCrypto {
 
     const salt = CryptoJS.enc.Hex.parse(this.saltHex);
 
-
-
-    // Derive 512 bits (16 32-bit words)
-    const derived = CryptoJS.PBKDF2(cleanPass, salt, {
-      keySize: 512 / 32,
-      iterations: 30000,
+    // Derive 256-bit Master Key via PBKDF2 (60,000 rounds)
+    const masterKey = CryptoJS.PBKDF2(cleanPass, salt, {
+      keySize: 256 / 32,
+      iterations: 60000,
       hasher: CryptoJS.algo.SHA256
     });
 
-    // Key Separation: Split derived material into two independent 256-bit keys
-    this.activeEncKey = CryptoJS.lib.WordArray.create(derived.words.slice(0, 8), 32);
-    this.activeMacKey = CryptoJS.lib.WordArray.create(derived.words.slice(8, 16), 32);
-
-
+    // Key Separation via HKDF-Expand: Two cryptographically distinct subkeys
+    this.activeEncKey = CryptoJS.HmacSHA256('AEGIS-ENC-v4', masterKey);
+    this.activeMacKey = CryptoJS.HmacSHA256('AEGIS-MAC-v4', masterKey);
 
     return this.saltHex;
   }
@@ -116,17 +128,16 @@ class StealthCrypto {
       throw new Error('Cryptographic key not initialized');
     }
 
-    // 1. Pack into canonical payload
-    const jsonStr = JSON.stringify(dataObj);
-
-    // 2. Apply Fixed-Size Constant Padding (Target 2048 bytes for text)
-    const neededPadding = Math.max(0, this.TARGET_PADDING_SIZE - jsonStr.length - 30);
+    // 1. Pack into canonical payload with UTF-8 byte measurement (BUG-09 fix)
+    const encoder = new TextEncoder();
+    const baseBytes = encoder.encode(JSON.stringify({ p: dataObj, n: '' })).byteLength;
+    const neededPadding = Math.max(0, this.TARGET_PADDING_SIZE - baseBytes);
     const paddedEnvelope = JSON.stringify({
       p: dataObj,
       n: StealthCrypto.generateNoise(neededPadding)
     });
 
-    // 3. Encrypt with random 16-byte IV using dedicated Encryption Key
+    // 2. Encrypt with random 16-byte IV using dedicated Encryption Key
     const iv = CryptoJS.lib.WordArray.random(16);
     const ivHex = iv.toString();
 
@@ -138,7 +149,7 @@ class StealthCrypto {
 
     const ciphertext = encrypted.toString();
 
-    // 4. Encrypt-then-MAC: HMAC-SHA256 Authentication Tag using dedicated MAC Key
+    // 3. Encrypt-then-MAC: HMAC-SHA256 Authentication Tag using dedicated MAC Key
     const authTag = CryptoJS.HmacSHA256(ciphertext + ':' + ivHex, this.activeMacKey).toString();
 
     return {
@@ -190,17 +201,10 @@ class StealthCrypto {
       );
     }
 
-    // 1. Verify HMAC with Constant-Time Check using dedicated MAC Key
+    // 1. Verify HMAC with Constant-Time Check using dedicated MAC Key (BUG-10: no leak)
     const expectedTag = CryptoJS.HmacSHA256(ciphertext + ':' + iv, this.activeMacKey).toString();
     if (!StealthCrypto.timingSafeEqual(expectedTag, authTag)) {
-      console.error(
-        '%c[AEGIS CRYPTO] HMAC MISMATCH DETAILS:',
-        'color: #ef4444; font-weight: bold;',
-        '\n  Expected tag prefix:', expectedTag.substring(0, 16),
-        '\n  Received tag prefix:', (authTag || '').substring(0, 16),
-        '\n  Salt match:', salt === this.saltHex
-      );
-      throw new Error('Decryption Failed: Authentication Tag mismatch (Salt match: ' + (salt === this.saltHex) + ')');
+      throw new Error('Decryption Failed: Authentication Tag mismatch');
     }
 
     // 2. Decrypt with dedicated Encryption Key

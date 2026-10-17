@@ -1,4 +1,4 @@
-﻿const http = require('http');
+const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -35,16 +35,16 @@ function getLocalIpAddresses() {
 
 // HTTP Server: Serves frontend & network diagnostics
 const server = http.createServer((req, res) => {
-  // CORS & Hardened Content Security Policy
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  // Security Headers: Remove wildcard CORS and set strict referrer & nosniff
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
   // Cache-Busting: Ensure browsers & proxies always fetch the latest JS/CSS
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
-  // Restrict connect-src to 'self' (prevents unauthorized external WebSocket exfiltration)
-  res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob: data: mediastream:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' ws: wss: https: stun: turn: turns: *.metered.ca *.google.com *.cloudflare.com; object-src 'none'; base-uri 'none'; form-action 'self';");
+  // Restrict connect-src to 'self' and authorized STUN/TURN relays only (prevents unauthorized external data exfiltration)
+  res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob: data: mediastream:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' turn: turns: stun: *.metered.ca *.google.com *.cloudflare.com; object-src 'none'; base-uri 'none'; form-action 'self';");
 
   // Network info API for easy phone hotspot connection
   if (req.url === '/api/network-info') {
@@ -67,7 +67,11 @@ const server = http.createServer((req, res) => {
   // Parse path and serve static files
   let safePath = req.url.split('?')[0];
   if (safePath === '/' || safePath === '') safePath = '/index.html';
-  if (safePath === '/video' || safePath === '/video/') safePath = '/video/index.html';
+  // Redirect legacy /video to / where the unified E2EE WebRTC modal & bubble live
+  if (safePath === '/video' || safePath === '/video/' || safePath === '/video/index.html') {
+    res.writeHead(302, { 'Location': '/' });
+    return res.end();
+  }
   if (safePath.startsWith('/') || safePath.startsWith('\\')) safePath = safePath.slice(1);
   const filePath = path.join(PUBLIC_DIR, safePath);
 
@@ -101,7 +105,7 @@ const MAX_CONNS_PER_IP = 25;
 
 const wss = new WebSocketServer({ 
   server,
-  maxPayload: 2 * 1024 * 1024 // 2MB max packet limit (optimized for encrypted photos + text)
+  maxPayload: 5 * 1024 * 1024 // 5MB max packet limit (supports encrypted photos + documents)
 });
 
 // Separate Presence Helper: Distinguishes between Chat peers and Video callers
@@ -157,8 +161,26 @@ wss.on('close', () => clearInterval(heartbeatInterval));
 wss.on('connection', (ws, req) => {
   ws.isAlive = true;
   ws.on('pong', () => { ws.isAlive = true; });
-  // Cloudflare Tunnel / Reverse Proxy Compatibility: Check forwarded headers if present
-  const forwardedIp = req.headers['cf-connecting-ip'] || (req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'].split(',')[0].trim() : null);
+
+  // 0. Origin Validation (Anti-CSWSH: Prevent cross-site WebSocket hijacking)
+  const origin = req.headers.origin;
+  const host = req.headers.host;
+  if (origin) {
+    try {
+      const originUrl = new URL(origin);
+      if (host && originUrl.host !== host && !originUrl.hostname.includes('localhost') && !originUrl.hostname.includes('127.0.0.1')) {
+        ws.close(1008, 'Anti-CSWSH: Cross-origin WebSocket connection rejected');
+        return;
+      }
+    } catch (e) {
+      ws.close(1008, 'Malformed Origin header');
+      return;
+    }
+  }
+
+  // Cloudflare Tunnel / Reverse Proxy Compatibility: Check forwarded headers ONLY when proxy is trusted
+  const trustProxy = process.env.TRUST_PROXY === 'true' || !!process.env.RENDER;
+  const forwardedIp = trustProxy ? (req.headers['cf-connecting-ip'] || (req.headers['x-forwarded-for'] ? req.headers['x-forwarded-for'].split(',')[0].trim() : null)) : null;
   const rawIp = req.socket.remoteAddress || 'unknown';
   const clientIp = forwardedIp || rawIp;
   const isLoopback = (rawIp === '127.0.0.1' || rawIp === '::1' || rawIp === '::ffff:127.0.0.1');
@@ -311,15 +333,14 @@ wss.on('connection', (ws, req) => {
         }
 
         case 'webrtc_signal': {
-          const targetRoom = currentRoom || (typeof data.roomId === 'string' ? data.roomId.trim() : null);
-          if (!targetRoom || !rooms.has(targetRoom)) return;
-          // Relay encrypted WebRTC signal payload to peers with video enabled
-          const roomSet = rooms.get(targetRoom);
+          if (!currentRoom || !rooms.has(currentRoom)) return;
+          if (!data.payload || typeof data.payload !== 'object') return;
+          // Relay ONLY authenticated encrypted WebRTC signal payload to peers in the same room
+          const roomSet = rooms.get(currentRoom);
           if (roomSet) {
             const serialized = JSON.stringify({
               type: 'webrtc_signal',
               payload: data.payload, // Encrypted signal
-              signal: data.signal || null, // Fallback for legacy
               sender: peerId
             });
             for (const client of roomSet) {
@@ -353,6 +374,9 @@ wss.on('connection', (ws, req) => {
               }
             }
           }
+          // CRITICAL FIX (BUG-01): Completely erase wiped room from server RAM immediately
+          rooms.delete(targetRoom);
+          currentRoom = null;
           break;
         }
 

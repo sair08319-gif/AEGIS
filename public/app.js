@@ -157,8 +157,6 @@
   let activePeersList = [];
   let activeChatPeers = [];
   let activeVideoPeers = [];
-  let sessionMessages = [];
-
   // Integrated WebRTC Call State
   let localStream = null;
   let remoteStream = null;
@@ -166,12 +164,13 @@
   let peerConnection = null;
   let isVideoCallActive = false;
   let isScreenSharing = false;
-  let isIpCloaked = true; // Guaranteed IP Privacy: Always Force TURN Relay // false = Direct P2P, true = Force TURN Relay
+  let isIpCloaked = true; // Guaranteed IP Privacy: Always Force TURN Relay
   let isAudioMuted = false;
   let isVideoMuted = false;
   let facingMode = 'user';
   let pendingIceCandidates = [];
-  // Dynamic ICE Configuration with Turn Relay & Anti-IP-Leak Protection
+
+  // Dynamic ICE Configuration with TURN Relay & Anti-IP-Leak Protection (BUG-04 fix)
   const getRtcConfig = () => {
     const turnRelays = [
       {
@@ -193,26 +192,17 @@
     ];
 
     return {
-      iceServers: [...turnRelays, ...stunServers],
-      iceCandidatePoolSize: 10
+      iceServers: isIpCloaked ? turnRelays : [...turnRelays, ...stunServers],
+      iceTransportPolicy: isIpCloaked ? 'relay' : 'all',
+      iceCandidatePoolSize: 4
     };
   };
 
   const rtcConfig = getRtcConfig();
 
-  const saveActiveSession = (room, name, pass) => {
-    // SECURITY HARDENING: Plaintext passphrases and decrypted messages are kept EXCLUSIVELY in memory closure.
-    // Zero disk serialization ensures no extension or crash-dump recovery can harvest keys.
-  };
-
-  const saveMessagesToSession = () => {
-    // In-memory only: sessionMessages array holds active decrypted history in RAM
-  };
-
   const clearActiveSession = () => {
     try {
-      sessionStorage.removeItem('aegis_session');
-      sessionStorage.removeItem('aegis_session_msgs');
+      sessionStorage.clear();
     } catch (e) {}
   };
   let currentReply = null;
@@ -717,17 +707,7 @@
     });
   }
 
-  const parseUrlFragment = () => {
-    const hash = window.location.hash.substring(1);
-    if (!hash) return;
-    const params = new URLSearchParams(hash);
-    if (params.get('room')) roomInput.value = params.get('room');
-    if (params.get('key')) passphraseInput.value = params.get('key');
-    // Anti-Forensics: Immediately scrub room key and secrets from browser URL bar history
-    try {
-      window.history.replaceState(null, '', window.location.pathname || '/');
-    } catch (e) {}
-  };
+
 
   const loadNetworkInfo = async () => {
     if (!localIpContainer) return;
@@ -963,6 +943,20 @@
   function renderActivePeersList() {
     if (!peersModal || !peersListContainer) return;
     peersListContainer.innerHTML = '';
+
+    // Anti-Phishing Safety Fingerprint (BUG-12 restoration)
+    if (currentRoom && window.stealthCrypto) {
+      const pass = (window.stealthCrypto && window.stealthCrypto.rawPassphrase) || passphraseInput.value || '';
+      const fp = calculateSafetyFingerprint(pass, currentRoom);
+      const fpCard = document.createElement('div');
+      fpCard.style.cssText = 'background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 8px; padding: 8px 10px; margin-bottom: 12px; text-align: center;';
+      fpCard.innerHTML = `
+        <div style="font-size: 0.68rem; font-weight: 700; color: #10b981; letter-spacing: 0.05em; text-transform: uppercase;">🛡️ Safety Fingerprint (SAS)</div>
+        <div style="font-size: 1.15rem; letter-spacing: 2px; margin: 4px 0 2px 0;">${escapeHtml(fp)}</div>
+        <div style="font-size: 0.65rem; color: var(--text-muted);">Verify emojis match across devices to confirm zero-knowledge key synchronization.</div>
+      `;
+      peersListContainer.appendChild(fpCard);
+    }
 
     const listToShow = (activePeersList && activePeersList.length > 0)
       ? activePeersList
@@ -1238,6 +1232,9 @@
 
         if (modalRemoteVideo && modalRemoteVideo.paused) modalRemoteVideo.play().catch(() => {});
         if (bubbleRemoteVideo && bubbleRemoteVideo.paused) bubbleRemoteVideo.play().catch(() => {});
+
+        // Attach Audio Visualizer to animate speaking indicator (BUG-12 fix)
+        initAudioVisualizer(remoteStream);
       }
     };
 
@@ -1341,7 +1338,7 @@
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({
         type: 'video_state',
-        roomId: currentRoom,
+        roomId: blindedRoomId || currentRoom,
         active: true
       }));
     }
@@ -1399,7 +1396,7 @@
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({
         type: 'video_state',
-        roomId: currentRoom,
+        roomId: blindedRoomId || currentRoom,
         active: false
       }));
     }
@@ -1725,7 +1722,7 @@
             // Indistinguishable schema: identical keys and id prefix as real messages
             ws.send(JSON.stringify({
               type: 'encrypted_message',
-              roomId: currentRoom,
+              roomId: blindedRoomId || currentRoom,
               payload: {
                 id: dummyPktId,
                 ciphertext: encryptedDummy.ciphertext,
@@ -1759,7 +1756,7 @@
     }
   };
 
-  // Cryptographic In-Room Presence: Announces codename to room peers only via encrypted channel
+  // Cryptographic In-Room Presence: Announces codename to room peers only via encrypted channel (BUG-09 fix)
   const sendEncryptedPresenceAnnouncement = async (isAck = false) => {
     if (!window.stealthCrypto || !window.stealthCrypto.isInitialized || !ws || ws.readyState !== WebSocket.OPEN) return;
     try {
@@ -1769,11 +1766,21 @@
         codename: codename,
         ephemeralPeerId: myEphemeralPeerId,
         clientType: 'chat',
-        hasVideo: isVideoCallActive
+        hasVideo: isVideoCallActive,
+        timestamp: Date.now()
       });
+      const pktId = 'pkt-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 9);
+      markAuthTagSeen(enc.authTag);
       ws.send(JSON.stringify({
         type: 'encrypted_message',
-        payload: enc
+        roomId: blindedRoomId || currentRoom,
+        payload: {
+          id: pktId,
+          ciphertext: enc.ciphertext,
+          iv: enc.iv,
+          salt: enc.salt,
+          authTag: enc.authTag
+        }
       }));
     } catch (e) {}
   };
@@ -1912,11 +1919,6 @@
               } catch (e) {
                 console.warn('[SECURITY] WebRTC signal dropped: Decryption or authentication failed.');
               }
-            } else if (msg.signal) {
-              if (msg.signal.offer && !isVideoCallActive) {
-                await startVideoCall(false);
-              }
-              await handleWebRtcSignal(msg.signal, msg.sender);
             }
             break;
           }
@@ -1990,6 +1992,12 @@
       // 2. Decrypt locally with AES-256 + verify HMAC
       const data = await window.stealthCrypto.decrypt(payload);
 
+      // 3. Stale Message / Delayed Replay Defense: Reject packets older than 2 minutes (BUG-09 fix)
+      if (data && data.timestamp && Math.abs(Date.now() - data.timestamp) > 120000) {
+        console.warn('Stale packet rejected: Timestamp outside 2-minute freshness window.');
+        return;
+      }
+
       // Intercept Encrypted Whiteboard Strokes & Clear commands
       if (data && data.whiteboardData && Array.isArray(data.strokes)) {
         if (!wbCtx) initWhiteboard();
@@ -2025,12 +2033,6 @@
           statusDot.style.transform = 'scale(1.4)';
           setTimeout(() => { if (statusDot) statusDot.style.transform = 'scale(1)'; }, 150);
         }
-        return;
-      }
-
-      // 3. Stale Message / Delayed Replay Defense: Reject packets older than 2 minutes
-      if (data && data.timestamp && Math.abs(Date.now() - data.timestamp) > 120000) {
-        console.warn('Stale message rejected: Timestamp outside 2-minute freshness window.');
         return;
       }
 
@@ -2114,7 +2116,7 @@
 
     ws.send(JSON.stringify({
       type: 'encrypted_message',
-      roomId: currentRoom,
+      roomId: blindedRoomId || currentRoom,
       payload: packet
     }));
 
@@ -2133,22 +2135,8 @@
     });
   });
 
-  // Render Message Bubble with Complete Auto-Burn RAM Purge & Session Persistence
-  const renderMessage = ({ sender, text = '', image = null, replyTo = null, timestamp, isOutgoing, isError = false, rawCiphertext = '', burnSeconds = 0 }, saveToSession = true) => {
-    if (saveToSession && !isError && (!burnSeconds || burnSeconds === 0)) {
-      sessionMessages.push({
-        sender,
-        text,
-        image,
-        replyTo,
-        timestamp,
-        isOutgoing,
-        isError,
-        rawCiphertext,
-        burnSeconds: 0
-      });
-      saveMessagesToSession();
-    }
+  // Render Message Bubble with Complete Auto-Burn RAM Purge (Zero Disk/Session Storage Persistence)
+  const renderMessage = ({ sender, text = '', image = null, replyTo = null, timestamp, isOutgoing, isError = false, rawCiphertext = '', burnSeconds = 0 }) => {
     const row = document.createElement('div');
     row.className = `msg-row ${isOutgoing ? 'outgoing' : 'incoming'}`;
 
@@ -2250,6 +2238,11 @@
         row.style.transform = 'scale(0.9)';
         setTimeout(() => {
           // COMPLETE RAM & CIPHER PURGE:
+          // 0. If enlarged in lightbox modal, purge and close modal (BUG-11 fix)
+          if (image && lightboxImg && lightboxImg.src === image) {
+            lightboxImg.src = '';
+            if (imageLightboxModal) imageLightboxModal.style.display = 'none';
+          }
           // 1. Wipe image memory & canvas handles
           row.querySelectorAll('img').forEach(img => {
             img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
@@ -2294,8 +2287,10 @@
     }, 120);
   }
 
-  // Emergency Kill-Switch: Wipes room from memory, server, and destroys tab
+  // Emergency Kill-Switch: Wipes room from memory, server, and destroys tab (BUG-01 fix)
   function triggerWipe(isIncoming = false) {
+    const roomToWipe = currentRoom;
+    const blindedToWipe = blindedRoomId;
     if (kioskCountdownTimer) {
       clearInterval(kioskCountdownTimer);
       kioskCountdownTimer = null;
@@ -2305,6 +2300,7 @@
     if (shieldVeilStandardActions) shieldVeilStandardActions.style.display = 'flex';
     if (kioskStatusBadge) kioskStatusBadge.style.display = 'none';
     currentRoom = '';
+    blindedRoomId = '';
     stopChaffGenerator();
     closePopover();
 
@@ -2321,16 +2317,18 @@
       localStorage.clear();
     } catch (e) {}
 
-    if (!isIncoming && ws && ws.readyState === WebSocket.OPEN) {
+    if (!isIncoming && ws && ws.readyState === WebSocket.OPEN && roomToWipe) {
       try {
-        const wipeTag = window.stealthCrypto.activeMacKey
-          ? CryptoJS.HmacSHA256('WIPE_ROOM:' + currentRoom, window.stealthCrypto.activeMacKey).toString()
-          : 'unauthenticated';
-        ws.send(JSON.stringify({ 
-          type: 'wipe_room', 
-          roomId: blindedRoomId || currentRoom,
-          authTag: wipeTag
-        }));
+        const wipeTag = (window.stealthCrypto && window.stealthCrypto.activeMacKey)
+          ? CryptoJS.HmacSHA256('WIPE_ROOM:' + roomToWipe, window.stealthCrypto.activeMacKey).toString()
+          : null;
+        if (wipeTag) {
+          ws.send(JSON.stringify({ 
+            type: 'wipe_room', 
+            roomId: blindedToWipe,
+            authTag: wipeTag
+          }));
+        }
       } catch (e) {}
     }
 
@@ -2341,7 +2339,6 @@
 
     peerCodenames.clear();
     clearActiveSession();
-    sessionMessages = [];
     if (isScreenSharing) stopScreenSharing();
     clearLocalWhiteboard(false);
     if (whiteboardModal) whiteboardModal.style.display = 'none';
@@ -2383,7 +2380,7 @@
     triggerWipe(false);
   }
 
-  // Seamless Session Restoration (Restores Room & Chat History after Video / Refresh)
+  // Seamless Session Restoration (Restores Room & Codename after Invite Link)
   const checkAndRestoreSession = async () => {
     let room = null;
     let name = null;
@@ -2401,29 +2398,15 @@
       } catch (e) {}
     }
 
-    // 2. Do not restore unverified credentials from sessionStorage
-    // Room and passphrase must be explicitly entered or provided in secret URL fragment
-
+    // 2. Room and passphrase must be explicitly entered or provided in secret URL fragment
     if (room && pass) {
       roomInput.value = room;
       passphraseInput.value = pass;
       if (name) usernameInput.value = name;
 
       await enterRoom(room, pass, name || usernameInput.value || generateCodename());
-
-      // Restore previously exchanged messages so chat is never blank
-      try {
-        const savedMsgs = JSON.parse(sessionStorage.getItem('aegis_session_msgs') || '[]');
-        if (Array.isArray(savedMsgs) && savedMsgs.length > 0) {
-          sessionMessages = [];
-          savedMsgs.forEach(m => renderMessage(m, false));
-        }
-      } catch (e) {}
     }
   };
-
-  // Auto-run session check
-  checkAndRestoreSession();
 
   panicBtn.addEventListener('click', triggerPanicWipe);
 
@@ -2449,12 +2432,12 @@
     stopChaffGenerator();
     closePopover();
     if (ws) {
-      ws.send(JSON.stringify({ type: 'leave', roomId: currentRoom }));
+      ws.send(JSON.stringify({ type: 'leave', roomId: blindedRoomId || currentRoom }));
       ws.close();
     }
     currentRoom = '';
+    blindedRoomId = '';
     clearActiveSession();
-    sessionMessages = [];
     window.stealthCrypto.destroy();
     seenAuthTags.clear();
     messagesViewport.innerHTML = '';
@@ -2552,7 +2535,7 @@
       lastWbY = coords.y;
 
       if (!wbFlushTimeout) {
-        wbFlushTimeout = setTimeout(flushWhiteboardStrokes, 50);
+        wbFlushTimeout = setTimeout(flushWhiteboardStrokes, 80); // 80ms flush (BUG-13 fix)
       }
     };
 
@@ -2601,12 +2584,22 @@
       pendingWbStrokes = [];
       const enc = await window.stealthCrypto.encrypt({
         whiteboardData: true,
-        strokes: batch
+        strokes: batch,
+        timestamp: Date.now()
       });
+      const pktId = 'pkt-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 9);
+      markAuthTagSeen(enc.authTag);
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({
           type: 'encrypted_message',
-          payload: enc
+          roomId: blindedRoomId || currentRoom,
+          payload: {
+            id: pktId,
+            ciphertext: enc.ciphertext,
+            iv: enc.iv,
+            salt: enc.salt,
+            authTag: enc.authTag
+          }
         }));
       }
     } catch (e) {}
@@ -2635,12 +2628,22 @@
       (async () => {
         try {
           const enc = await window.stealthCrypto.encrypt({
-            whiteboardClear: true
+            whiteboardClear: true,
+            timestamp: Date.now()
           });
+          const pktId = 'pkt-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 9);
+          markAuthTagSeen(enc.authTag);
           if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({
               type: 'encrypted_message',
-              payload: enc
+              roomId: blindedRoomId || currentRoom,
+              payload: {
+                id: pktId,
+                ciphertext: enc.ciphertext,
+                iv: enc.iv,
+                salt: enc.salt,
+                authTag: enc.authTag
+              }
             }));
           }
         } catch (e) {}
@@ -2678,9 +2681,12 @@
   // Hotkey Navigation & Safe Panic Trigger
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      // 0. If Screen Privacy Shield is visible, ESC dismisses it cleanly
+      // 0. If Screen Privacy Shield is visible, ESC dismisses it cleanly (unless locked or Kiosk active) (BUG-07 fix)
       if (screenShieldOverlay && screenShieldOverlay.style.display === 'flex') {
-        hideScreenShield(true);
+        if (isKioskModeActive || kioskCountdownTimer || isShieldLocked) {
+          return; // Do not allow ESC to unveil a locked or Kiosk-violated shield
+        }
+        hideScreenShield(false);
         panicPressTimes = [];
         return;
       }
@@ -2733,11 +2739,11 @@
     }
   });
 
-  // Initialize
+  // Initialize: default random values, load LAN info, and restore session (BUG-06 fix)
   usernameInput.value = generateCodename();
   roomInput.value = generateRoomId();
-  parseUrlFragment();
   loadNetworkInfo();
+  checkAndRestoreSession();
 
 
   // ==========================================================================
