@@ -1636,9 +1636,6 @@
         if (kioskStatusBadge) kioskStatusBadge.style.display = 'none';
       }
 
-      // Save active session for instant return from video or page refresh
-      saveActiveSession(currentRoom, codename, passphrase);
-
       // Start Chaff (Dummy Traffic) Generator
       startChaffGenerator();
 
