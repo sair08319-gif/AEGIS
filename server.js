@@ -168,7 +168,7 @@ wss.on('connection', (ws, req) => {
   if (origin) {
     try {
       const originUrl = new URL(origin);
-      if (host && originUrl.host !== host && !originUrl.hostname.includes('localhost') && !originUrl.hostname.includes('127.0.0.1')) {
+      if (host && originUrl.host !== host) {
         ws.close(1008, 'Anti-CSWSH: Cross-origin WebSocket connection rejected');
         return;
       }
@@ -374,9 +374,6 @@ wss.on('connection', (ws, req) => {
               }
             }
           }
-          // CRITICAL FIX (BUG-01): Completely erase wiped room from server RAM immediately
-          rooms.delete(targetRoom);
-          currentRoom = null;
           break;
         }
 

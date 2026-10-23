@@ -26,19 +26,29 @@ class StealthCrypto {
   // Excludes #, &, +, ?, =, ; to ensure invite URLs and fragments are never mangled
   static generateSecretKey(length = 20) {
     const charset = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@$%*-_';
+    const charsetLen = charset.length; // 63
+    const maxValid = 256 - (256 % charsetLen); // 252 (reject >= 252 to eliminate modulo bias)
     let result = '';
     
     if (window.crypto && window.crypto.getRandomValues) {
-      const randomVals = new Uint8Array(length);
-      window.crypto.getRandomValues(randomVals);
-      for (let i = 0; i < length; i++) {
-        result += charset[randomVals[i] % charset.length];
+      while (result.length < length) {
+        const needed = length - result.length;
+        const buf = new Uint8Array(Math.max(needed * 2, 16));
+        window.crypto.getRandomValues(buf);
+        for (let i = 0; i < buf.length && result.length < length; i++) {
+          if (buf[i] < maxValid) {
+            result += charset[buf[i] % charsetLen];
+          }
+        }
       }
     } else {
-      const randomWords = CryptoJS.lib.WordArray.random(length);
-      const hex = randomWords.toString();
-      for (let i = 0; i < length; i++) {
-        result += charset[parseInt(hex.substr(i * 2, 2), 16) % charset.length];
+      const words = CryptoJS.lib.WordArray.random(Math.max(length * 2, 16));
+      const hex = words.toString();
+      for (let i = 0; i < hex.length - 1 && result.length < length; i += 2) {
+        const byte = parseInt(hex.substr(i, 2), 16);
+        if (byte < maxValid) {
+          result += charset[byte % charsetLen];
+        }
       }
     }
     return result;
